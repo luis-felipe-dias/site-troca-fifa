@@ -1,107 +1,45 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-import { House, BookOpen, ArrowsClockwise, MagnifyingGlass, Shield, SignOut } from "@phosphor-icons/react";
-import { Card } from "@/components/ui/Card";
+import { ReactNode } from "react";
+import Sidebar from "./Sidebar";
+import ThemeToggle from "./ThemeToggle";
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: House },
-  { href: "/album", label: "Álbum", icon: BookOpen },
-  { href: "/matches", label: "Matches", icon: ArrowsClockwise },
-  { href: "/busca", label: "Busca", icon: MagnifyingGlass },
-  { href: "/admin", label: "Admin", icon: Shield }
-];
+interface AppShellProps {
+  children: ReactNode;
+  title?: string;
+  badge?: ReactNode;
+}
 
-export function AppShell({
-  children,
-  title,
-  badge
-}: {
-  children: React.ReactNode;
-  title: string;
-  badge?: React.ReactNode;
-}) {
-  const [me, setMe] = useState<{ role: "user" | "admin"; yupId: string } | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/me");
-        const json = await res.json();
-        if (!res.ok) return;
-        setMe({ role: json.usuario.role, yupId: json.usuario.yupId });
-      } catch {
-        // ignore
-      }
-    })();
-  }, []);
-
-  const items = useMemo(() => {
-    if (me?.role === "admin") return nav;
-    return nav.filter((i) => i.href !== "/admin");
-  }, [me]);
-
-  async function logout() {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      toast.success("Saiu");
-      window.location.href = "/login";
-    } catch {
-      toast.error("Erro ao sair");
-    }
-  }
-
+export function AppShell({ children, title, badge }: AppShellProps) {
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto max-w-6xl px-4 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-4">
-          <aside className="md:sticky md:top-6 h-fit">
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-xs text-yup-primary/60">Yup</div>
-                  <div className="text-lg font-semibold tracking-tight">Trocas</div>
-                </div>
-                <div className="h-8 w-8 rounded-xl bg-yup-pinkSoft/60 border border-yup-primary/10" />
-              </div>
-              <nav className="mt-4 grid gap-1">
-                {items.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-yup-primary/80 hover:bg-black/5 transition"
-                    >
-                      <Icon size={18} weight="duotone" />
-                      <span className="flex-1">{item.label}</span>
-                      {item.href === "/matches" ? badge : null}
-                    </Link>
-                  );
-                })}
-              </nav>
-              <button
-                type="button"
-                onClick={logout}
-                className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm bg-white/60 hover:bg-white/80 border border-yup-primary/10 transition"
-              >
-                <SignOut size={18} weight="duotone" />
-                Sair
-              </button>
-            </Card>
-          </aside>
-
-          <main>
-            <div className="mb-4 flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+    <div className="flex min-h-screen bg-gray-50 dark:bg-[#0d0d1a]">
+      <Sidebar />
+      
+      {/* Conteúdo principal */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header com título e ThemeToggle */}
+        <header className="sticky top-0 z-10 bg-white/80 dark:bg-[#1a1a2e]/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-800">
+          <div className="flex items-center justify-between px-4 py-3 lg:px-6">
+            <div>
+              {title && (
+                <h1 className="text-lg lg:text-xl font-semibold text-gray-800 dark:text-white">
+                  {title}
+                </h1>
+              )}
+              {badge && <div className="mt-0.5">{badge}</div>}
             </div>
-            {children}
-          </main>
-        </div>
+            <ThemeToggle />
+          </div>
+        </header>
+        
+        {/* Conteúdo principal */}
+        <main className="flex-1">
+          {children}
+        </main>
       </div>
     </div>
   );
 }
 
+// Também exporta como default para compatibilidade com importações existentes
+export default AppShell;

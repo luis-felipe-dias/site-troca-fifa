@@ -1,29 +1,33 @@
-import type { Config } from "tailwindcss";
+import type { Config } from 'tailwindcss'
 
-export default {
-  content: ["./src/**/*.{ts,tsx}"],
+const config: Config = {
+  darkMode: 'class',
+  content: [
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
   theme: {
     extend: {
       colors: {
+        // ORDEM: da esquerda (fundo/menos contraste) para direita (destaque/mais contraste)
+        'noite-serena': '#272D4F',     // 1º - Fundo escuro / textos
+        'bruma-suave': '#DDE3F1',      // 2º - Cards / áreas secundárias
+        'toque-afeto': '#FEFEDE',      // 3º - Fundo claro principal
+        'abraco-doce': '#FFC6C5',      // 4º - Hovers / ações secundárias
+        'brincadeira-viva': '#EA70B0', // 5º - Botões principais / CTAs
+        
+        // Mantém compatibilidade com código existente
         yup: {
-          primary: "#272D4F",
-          bg: "#FEFDEB",
-          softBlue: "#DDE3F1",
-          pinkSoft: "#FFC6C5",
-          pinkVibrant: "#EA70B0",
-          green: "#ACBD6F",
-          orange: "#F15040"
-        }
+          bg: '#FEFEDE',        // toque-afeto
+          primary: '#272D4F',   // noite-serena
+          softBlue: '#DDE3F1',  // bruma-suave
+          green: '#EA70B0',     // brincadeira-viva
+          pinkVibrant: '#FFC6C5', // abraco-doce
+        },
       },
-      boxShadow: {
-        glass: "0 8px 30px rgba(39,45,79,0.12)",
-        soft: "0 10px 25px rgba(39,45,79,0.10)"
-      },
-      borderRadius: {
-        xl2: "1.25rem"
-      }
-    }
+    },
   },
-  plugins: []
-} satisfies Config;
-
+  plugins: [],
+}
+export default config

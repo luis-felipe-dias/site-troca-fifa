@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { getAvatarById } from "@/lib/avatar";
 
 type Suggestion = { userId: string; yupId: string; cidade: string; give: string; want: string };
 type Troca = { id: string; from: string; to: string; figurinhaA: string; figurinhaB: string; status: string };
@@ -69,8 +70,8 @@ export default function MatchesPage() {
     <AppShell title="Matches">
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle>Sugestões</CardTitle>
-          <div className="text-sm text-yup-primary/70">Trocas possíveis (sistema gera quando ambos têm o que o outro precisa).</div>
+          <CardTitle>Sugestões 💕</CardTitle>
+          <div className="text-sm text-yup-primary/70 dark:text-white/70">Trocas possíveis (sistema gera quando ambos têm o que o outro precisa).</div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -80,48 +81,56 @@ export default function MatchesPage() {
               {suggestions.map((s, idx) => (
                 <Card key={idx} className="p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm">
-                      <div className="font-semibold">{s.yupId}</div>
-                      <div className="text-yup-primary/60">{s.cidade}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-2xl">{getAvatarById(s.userId)}</div>
+                      <div className="text-sm">
+                        <div className="font-semibold dark:text-white">#{s.yupId}</div>
+                        <div className="text-yup-primary/60 dark:text-white/60 text-xs">{s.cidade}</div>
+                      </div>
                     </div>
-                    <div className="text-sm text-yup-primary/80">
-                      Você dá <span className="font-semibold">{s.give}</span> e recebe{" "}
-                      <span className="font-semibold">{s.want}</span>
+                    <div className="text-sm text-yup-primary/80 dark:text-white/80">
+                      Você dá <span className="font-semibold text-brincadeira-viva">{s.give}</span> e recebe{" "}
+                      <span className="font-semibold text-brincadeira-viva">{s.want}</span>
                     </div>
                     <Button onClick={() => criarTroca(s)} className="whitespace-nowrap">
-                      Trocar
+                      💚 Trocar
                     </Button>
                   </div>
                 </Card>
               ))}
             </div>
           ) : (
-            <div className="text-sm text-yup-primary/60">Sem sugestões no momento. Marque repetidas e faltantes no Álbum.</div>
+            <div className="text-sm text-yup-primary/60 dark:text-white/60">Sem sugestões no momento. Marque repetidas e faltantes no Álbum.</div>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Trocas</CardTitle>
-          <div className="text-sm text-yup-primary/70">Pendentes, aceitas e recusadas.</div>
+          <CardTitle>Trocas 📋</CardTitle>
+          <div className="text-sm text-yup-primary/70 dark:text-white/70">Pendentes, aceitas e recusadas.</div>
         </CardHeader>
         <CardContent>
           {!trocas.length ? (
-            <div className="text-sm text-yup-primary/60">Nenhuma troca ainda.</div>
+            <div className="text-sm text-yup-primary/60 dark:text-white/60">Nenhuma troca ainda.</div>
           ) : (
             <div className="grid gap-3">
               {trocas.map((t) => (
                 <Card key={t.id} className="p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm text-yup-primary/70">
-                      {t.from} → {t.to}
+                    <div className="flex items-center gap-2">
+                      <div className="text-2xl">{getAvatarById(t.from === "Você" ? t.to : t.from)}</div>
+                      <div className="text-sm text-yup-primary/70 dark:text-white/70">
+                        {t.from} → {t.to}
+                      </div>
                     </div>
                     <div className="text-sm">
                       {t.figurinhaA} ↔ {t.figurinhaB}
                     </div>
                     <div className="text-sm">
-                      <span className="rounded-full px-2 py-0.5 bg-white/60 border border-yup-primary/10">{t.status}</span>
+                      <span className="rounded-full px-2 py-0.5 bg-white/60 dark:bg-noite-serena/60 border border-yup-primary/10">
+                        {t.status === "pendente" ? "⏳ Pendente" : t.status === "aceito" ? "✅ Aceito" : "❌ Recusado"}
+                      </span>
                     </div>
                     {t.status === "pendente" ? (
                       <div className="flex gap-2">
@@ -143,4 +152,3 @@ export default function MatchesPage() {
     </AppShell>
   );
 }
-

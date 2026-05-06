@@ -11,11 +11,71 @@ body {
   height: 100%;
 }
 
+/* LIGHT MODE (padrão) */
 body {
-  background: theme(colors.yup.bg);
-  color: theme(colors.yup.primary);
+  background: #FEFEDE;  /* toque-afeto */
+  color: #272D4F;       /* noite-serena */
 }
 
+/* DARK MODE - ATIVADO PELA CLASSE .dark */
+.dark body {
+  background: #1a1a2e;  /* fundo escuro mais suave */
+  color: #DDE3F1;       /* bruma-suave para texto */
+}
+
+/* Melhor contraste no dark mode para cards */
+.dark .glass {
+  background: rgba(26, 26, 46, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(221, 227, 241, 0.15);
+}
+
+.dark .card,
+.dark [class*="bg-white"] {
+  background-color: #272D4F !important; /* noite-serena */
+  color: #DDE3F1 !important;
+}
+
+.dark button[class*="ghost"] {
+  color: #DDE3F1;
+}
+
+.dark button[class*="ghost"]:hover {
+  background-color: rgba(221, 227, 241, 0.1);
+}
+
+/* Inputs no dark mode */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #272D4F;
+  border-color: #DDE3F1;
+  color: #DDE3F1;
+}
+
+.dark input::placeholder {
+  color: #DDE3F1;
+}
+
+/* Links e textos secundários no dark */
+.dark .text-yup-primary\/60,
+.dark .text-yup-primary\/70,
+.dark .text-yup-primary\/80 {
+  color: #DDE3F1 !important;
+  opacity: 0.7;
+}
+
+/* Botão primário no dark */
+.dark .bg-brincadeira-viva {
+  background-color: #EA70B0;
+  color: #1a1a2e;
+}
+
+.dark .bg-brincadeira-viva:hover {
+  background-color: #FFC6C5;
+}
+
+/* Classe glass original (preservada) */
 .glass {
   background: rgba(255, 255, 255, 0.65);
   backdrop-filter: blur(12px);
@@ -23,3 +83,28 @@ body {
   border: 1px solid rgba(39, 45, 79, 0.08);
 }
 
+/* Botões e toque mobile */
+button, 
+a[role="button"],
+.clickable {
+  min-height: 48px;
+  min-width: 48px;
+}
+
+/* Scroll suave */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Previne zoom no iOS */
+input, 
+select, 
+textarea, 
+button {
+  font-size: 16px;
+}
+
+/* Transições suaves */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}

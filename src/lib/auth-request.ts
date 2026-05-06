@@ -9,7 +9,17 @@ export async function getBearerTokenFromCookies() {
 export async function requireAuth() {
   const token = await getBearerTokenFromCookies();
   if (!token) throw new Error("UNAUTHORIZED");
-  return verifyJwt(token);
+  const payload = verifyJwt(token);
+  
+  // GARANTIR que NUNCA retorna nome real
+  if (payload && 'nomeCompleto' in payload) {
+    delete (payload as any).nomeCompleto;
+  }
+  if (payload && 'nome' in payload) {
+    delete (payload as any).nome;
+  }
+  
+  return payload;
 }
 
 export async function requireAdmin() {
@@ -17,4 +27,3 @@ export async function requireAdmin() {
   if (payload.role !== "admin") throw new Error("FORBIDDEN");
   return payload;
 }
-
