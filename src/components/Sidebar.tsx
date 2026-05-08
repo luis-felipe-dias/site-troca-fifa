@@ -8,10 +8,10 @@ import {
   Book, 
   Heart, 
   MagnifyingGlass, 
-  SignOut, 
-  Shield, 
+  SignOut,
+  Shield,
   List,
-  X 
+  X
 } from "@phosphor-icons/react";
 
 export default function Sidebar() {
@@ -20,14 +20,25 @@ export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", {
+      credentials: "include",
+      headers: { "Cache-Control": "no-cache" }
+    })
       .then(res => res.json())
       .then(data => {
-        setIsAdmin(data.user?.role === "admin");
+        console.log("Auth data Sidebar:", data);
+        const userRole = data.user?.role || data.role;
+        setIsAdmin(userRole === "admin");
+        setLoading(false);
       })
-      .catch(() => setIsAdmin(false));
+      .catch((err) => {
+        console.error("Erro ao buscar auth:", err);
+        setLoading(false);
+        setIsAdmin(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -56,6 +67,16 @@ export default function Sidebar() {
     ...(isAdmin ? [{ name: "Admin", href: "/admin", icon: Shield }] : []),
   ];
 
+  if (loading) {
+    return (
+      <aside className="hidden lg:flex flex-col h-screen sticky top-0 w-20 bg-white dark:bg-[#1a1a2e] border-r border-gray-200 dark:border-gray-800">
+        <div className="flex items-center justify-center p-4">
+          <div className="w-6 h-6 border-2 border-brincadeira-viva border-t-transparent rounded-full animate-spin" />
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <>
       {/* Sidebar Desktop */}
@@ -64,6 +85,7 @@ export default function Sidebar() {
           isCollapsed ? "w-20" : "w-64"
         }`}
       >
+        {/* Logo e botão recolher */}
         <div className={`flex items-center ${isCollapsed ? "justify-center" : "justify-between"} p-4 border-b border-gray-200 dark:border-gray-800`}>
           {!isCollapsed && (
             <div>
@@ -77,11 +99,13 @@ export default function Sidebar() {
           <button
             onClick={toggleCollapse}
             className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            title={isCollapsed ? "Expandir" : "Recolher"}
           >
             <List size={20} className="text-gray-600 dark:text-gray-400" />
           </button>
         </div>
 
+        {/* Menu de navegação */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -103,6 +127,7 @@ export default function Sidebar() {
           })}
         </nav>
 
+        {/* Botão Sair */}
         <div className="p-3 border-t border-gray-200 dark:border-gray-800">
           <button
             onClick={handleLogout}
@@ -145,7 +170,7 @@ export default function Sidebar() {
               </button>
             </div>
 
-            <nav className="flex-1 p-3 space-y-1">
+            <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;

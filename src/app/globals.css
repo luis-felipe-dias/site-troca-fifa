@@ -13,7 +13,7 @@ body {
 
 /* LIGHT MODE (padrão) */
 body {
-  background: #FEFEDE;  /* toque-afeto */
+  background: #272D4F;  /* toque-afeto */
   color: #272D4F;       /* noite-serena */
 }
 
@@ -67,12 +67,12 @@ body {
 
 /* Botão primário no dark */
 .dark .bg-brincadeira-viva {
-  background-color: #EA70B0;
+  background-color: #FFB3C6;
   color: #1a1a2e;
 }
 
 .dark .bg-brincadeira-viva:hover {
-  background-color: #FFC6C5;
+  background-color: #f62d7a;
 }
 
 /* Classe glass original (preservada) */

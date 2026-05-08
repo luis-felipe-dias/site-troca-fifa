@@ -1,41 +1,44 @@
-import { z } from "zod";
+import { NextRequest, NextResponse } from "next/server";
 import { connectMongo } from "@/lib/db";
 import { requireAuth } from "@/lib/auth-request";
 import { UsuarioFigurinha } from "@/models/UsuarioFigurinha";
-import { jsonError, jsonOk } from "@/lib/http";
+import { Usuario } from "@/models/Usuario";
 
-const Schema = z.object({
-  codigo: z.string().min(2),
-  possui: z.boolean(),
-  repetida: z.boolean(),
-  quantidadeRepetida: z.number().int().min(0).optional()
-});
-
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
     const payload = await requireAuth();
-    const body = await req.json();
-    const data = Schema.parse(body);
-
     await connectMongo();
-    const quantidade = Math.max(0, data.quantidadeRepetida ?? (data.repetida ? 1 : 0));
-    await UsuarioFigurinha.updateOne(
-      { userId: payload.sub, codigo: data.codigo },
+
+    // Buscar o _id do usuário
+    const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id").lean();
+    if (!usuario) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+    }
+    const userId = usuario._id;
+
+    const body = await request.json();
+    const { codigo, possui, repetida, quantidadeRepetida } = body;
+
+    // Atualizar ou criar registro
+    const result = await UsuarioFigurinha.findOneAndUpdate(
+      { userId: userId, codigo },
       {
-        $set: {
-          possui: data.possui,
-          repetida: data.possui ? data.repetida : false,
-          quantidadeRepetida: data.possui && data.repetida ? quantidade : 0
-        }
+        userId: userId,
+        codigo,
+        possui: possui || false,
+        repetida: repetida || false,
+        quantidadeRepetida: quantidadeRepetida || 0,
+        updatedAt: new Date()
       },
-      { upsert: true }
+      { upsert: true, new: true }
     );
 
-    return jsonOk({});
-  } catch (err: any) {
-    if (err?.name === "ZodError") return jsonError("Dados inválidos", 400, err.issues);
-    if (String(err?.message || "") === "UNAUTHORIZED") return jsonError("Não autenticado", 401);
-    return jsonError("Erro", 500);
+    return NextResponse.json({ ok: true, data: result });
+  } catch (error: any) {
+    console.error("Erro ao marcar figurinha:", error);
+    return NextResponse.json(
+      { error: error.message || "Erro ao salvar" },
+      { status: 500 }
+    );
   }
 }
-

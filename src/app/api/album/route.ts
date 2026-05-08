@@ -1,35 +1,53 @@
+import { NextResponse } from "next/server";
 import { connectMongo } from "@/lib/db";
 import { requireAuth } from "@/lib/auth-request";
 import { Figurinha } from "@/models/Figurinha";
 import { UsuarioFigurinha } from "@/models/UsuarioFigurinha";
-import { jsonError, jsonOk } from "@/lib/http";
+import { Usuario } from "@/models/Usuario";
 
 export async function GET() {
   try {
     const payload = await requireAuth();
     await connectMongo();
 
-    const figurinhas = await Figurinha.find().sort({ pagina: 1, codigo: 1 }).lean();
-    const marks = await UsuarioFigurinha.find({ userId: payload.sub }).lean();
-    const map = new Map(marks.map((m) => [m.codigo, m]));
+    // Buscar o _id do usuário
+    const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id").lean();
+    if (!usuario) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+    }
+    const userId = usuario._id;
 
-    const stickers = figurinhas.map((f) => {
-      const m = map.get(f.codigo);
+    // Buscar todas as figurinhas
+    const todasFigurinhas = await Figurinha.find({}).sort({ pagina: 1, codigo: 1 }).lean();
+
+    // Buscar as figurinhas do usuário
+    const userFigurinhas = await UsuarioFigurinha.find({ userId: userId }).lean();
+
+    // Criar mapa de figurinhas do usuário
+    const userMap = new Map();
+    userFigurinhas.forEach((uf) => {
+      userMap.set(uf.codigo, uf);
+    });
+
+    // Combinar dados
+    const stickers = todasFigurinhas.map((fig) => {
+      const userFig = userMap.get(fig.codigo);
       return {
-        codigo: f.codigo,
-        pagina: f.pagina,
-        nomeSelecao: f.nomeSelecao,
-        possui: !!m?.possui,
-        repetida: !!m?.repetida
-        ,
-        quantidadeRepetida: m?.quantidadeRepetida || 0
+        codigo: fig.codigo,
+        pagina: fig.pagina,
+        nomeSelecao: fig.nomeSelecao,
+        possui: userFig?.possui || false,
+        repetida: userFig?.repetida || false,
+        quantidadeRepetida: userFig?.quantidadeRepetida || 0
       };
     });
 
-    return jsonOk({ stickers });
-  } catch (err: any) {
-    if (String(err?.message || "") === "UNAUTHORIZED") return jsonError("Não autenticado", 401);
-    return jsonError("Erro", 500);
+    return NextResponse.json({ stickers });
+  } catch (error: any) {
+    console.error("Erro ao carregar álbum:", error);
+    return NextResponse.json(
+      { error: error.message || "Erro ao carregar álbum" },
+      { status: 500 }
+    );
   }
 }
-

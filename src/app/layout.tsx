@@ -3,7 +3,7 @@ import "./globals.css";
 import { Toaster } from "@/components/Toaster";
 
 export const metadata: Metadata = {
-  title: process.env.NEXT_PUBLIC_APP_NAME || "Yup Trocas",
+  title: process.env.NEXT_PUBLIC_APP_NAME || "Yup-Colecionaveis",
   description: "Painel de troca de figurinhas - Yup"
 };
 

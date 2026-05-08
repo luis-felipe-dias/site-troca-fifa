@@ -1,28 +1,47 @@
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { verifyJwt } from "@/lib/jwt";
 import { connectMongo } from "@/lib/db";
-import { requireAuth } from "@/lib/auth-request";
 import { Usuario } from "@/models/Usuario";
-import { jsonError, jsonOk } from "@/lib/http";
 
 export async function GET() {
   try {
-    const payload = await requireAuth();
+    const cookieStore = await cookies();
+    const token = cookieStore.get("token")?.value;
+
+    if (!token) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
+    const payload = verifyJwt(token);
+    if (!payload || !payload.sub) {
+      return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+    }
+
     await connectMongo();
+    const usuario = await Usuario.findOne({ yupId: payload.sub })
+      .select("yupId role cidade nomeCompleto email")
+      .lean();
 
-    const usuario = await Usuario.findById(payload.sub).select("yupId role senhaTemporaria createdAt");
-    if (!usuario) return jsonError("Usuário não encontrado", 404);
+    if (!usuario) {
+      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 401 });
+    }
 
-    return jsonOk({
-      usuario: {
-        id: String(usuario._id),
+    return NextResponse.json({
+      ok: true,
+      user: {
         yupId: usuario.yupId,
         role: usuario.role,
-        senhaTemporaria: usuario.senhaTemporaria,
-        createdAt: usuario.createdAt
+        cidade: usuario.cidade,
+        nomeCompleto: usuario.nomeCompleto,
+        email: usuario.email
       }
     });
-  } catch (err: any) {
-    if (String(err?.message || "") === "UNAUTHORIZED") return jsonError("Não autenticado", 401);
-    return jsonError("Erro", 500);
+  } catch (error: any) {
+    console.error("Erro no /me:", error);
+    return NextResponse.json(
+      { error: "Erro interno do servidor" },
+      { status: 500 }
+    );
   }
 }
-

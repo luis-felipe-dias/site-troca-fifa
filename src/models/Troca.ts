@@ -8,6 +8,7 @@ export type TrocaDoc = {
   figurinhaA: string;
   figurinhaB: string;
   status: TrocaStatus;
+  eventoId?: Types.ObjectId; // NOVO: evento de troca vinculado
   dataTroca?: string;
   localTroca?: string;
   createdAt: Date;
@@ -20,6 +21,7 @@ const TrocaSchema = new Schema<TrocaDoc>(
     figurinhaA: { type: String, required: true },
     figurinhaB: { type: String, required: true },
     status: { type: String, enum: ["pendente", "aceito", "recusado"], default: "pendente", index: true },
+    eventoId: { type: Schema.Types.ObjectId, ref: "EventoTroca", index: true }, // NOVO
     dataTroca: { type: String },
     localTroca: { type: String }
   },
@@ -28,4 +30,3 @@ const TrocaSchema = new Schema<TrocaDoc>(
 
 export const Troca: Model<TrocaDoc> =
   (mongoose.models.Troca as Model<TrocaDoc>) || mongoose.model<TrocaDoc>("Troca", TrocaSchema, "trocas");
-

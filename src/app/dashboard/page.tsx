@@ -7,18 +7,27 @@ import { UsuarioFigurinha } from "@/models/UsuarioFigurinha";
 import { Troca } from "@/models/Troca";
 import { Usuario } from "@/models/Usuario";
 import BannerLoja from "@/components/BannerLoja";
+import mongoose from "mongoose";
 
 async function getStats() {
   const payload = await requireAuth();
   await connectMongo();
 
+  // Buscar o _id do usuário no banco
+  const usuario = await Usuario.findOne({ yupId: payload.sub }).lean();
+  if (!usuario) {
+    throw new Error("Usuário não encontrado");
+  }
+  const userId = usuario._id;
+
   const totalFigurinhas = await Figurinha.countDocuments();
-  const possui = await UsuarioFigurinha.countDocuments({ userId: payload.sub, possui: true });
-  const repetidas = await UsuarioFigurinha.countDocuments({ userId: payload.sub, repetida: true });
+  const possui = await UsuarioFigurinha.countDocuments({ userId: userId, possui: true });
+  const repetidas = await UsuarioFigurinha.countDocuments({ userId: userId, repetida: true });
   const faltantes = Math.max(0, totalFigurinhas - possui);
   const progresso = totalFigurinhas ? Math.round((possui / totalFigurinhas) * 100) : 0;
 
-  const pendentes = await Troca.countDocuments({ userB: payload.sub, status: "pendente" });
+  // Usar o ObjectId para buscar trocas pendentes
+  const pendentes = await Troca.countDocuments({ userB: userId, status: "pendente" });
   
   const user = await Usuario.findOne({ yupId: payload.sub }).select("yupId cidade").lean();
 

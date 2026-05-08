@@ -4,13 +4,13 @@ import { requireAdmin } from "@/lib/auth-request";
 import { Usuario } from "@/models/Usuario";
 import { UsuarioFigurinha } from "@/models/UsuarioFigurinha";
 import { Figurinha } from "@/models/Figurinha";
-import mongoose from "mongoose";
 
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin();
     await connectMongo();
     
+    // Pegar parâmetros da URL
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
@@ -18,8 +18,10 @@ export async function GET(request: NextRequest) {
     
     const skip = (page - 1) * limit;
     
+    // Buscar total de figurinhas do álbum
     const totalAlbum = await Figurinha.countDocuments();
     
+    // Construir filtro de busca
     const filter: any = {};
     if (search) {
       filter.$or = [
@@ -29,8 +31,10 @@ export async function GET(request: NextRequest) {
       ];
     }
     
+    // Buscar total de usuários (para paginação)
     const totalUsuarios = await Usuario.countDocuments(filter);
     
+    // Buscar usuários com paginação
     const usuarios = await Usuario.find(filter)
       .select("yupId nomeCompleto email dataNascimento cidade role createdAt")
       .sort({ createdAt: -1 })
@@ -38,6 +42,7 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .lean();
     
+    // Para cada usuário, buscar quantidade de figurinhas
     const usuariosComStats = await Promise.all(
       usuarios.map(async (user) => {
         const userId = user._id;
@@ -78,6 +83,12 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error("Erro ao buscar usuários:", err);
+    if (String(err?.message || "") === "UNAUTHORIZED") {
+      return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
+    }
+    if (String(err?.message || "") === "FORBIDDEN") {
+      return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
+    }
     return NextResponse.json({ error: "Erro ao buscar usuarios" }, { status: 500 });
   }
 }

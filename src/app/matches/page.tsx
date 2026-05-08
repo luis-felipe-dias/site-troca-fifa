@@ -5,15 +5,43 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { getAvatarById } from "@/lib/avatar";
+import MatchCard from "@/components/MatchCard";
+import { X, Calendar, MapPin, Clock, Link as LinkIcon } from "@phosphor-icons/react";
 
-type Suggestion = { userId: string; yupId: string; cidade: string; give: string; want: string };
-type Troca = { id: string; from: string; to: string; figurinhaA: string; figurinhaB: string; status: string };
+type Suggestion = { 
+  userId: string; 
+  yupId: string; 
+  cidade: string; 
+  give: string; 
+  want: string;
+  avatar: string;
+};
+
+type TrocaEvento = {
+  titulo: string;
+  localNome: string;
+  localUrl: string;
+  dataInicio: string;
+  dataFim: string;
+};
+
+type Troca = { 
+  id: string; 
+  from: string; 
+  to: string; 
+  figurinhaA: string; 
+  figurinhaB: string; 
+  status: string;
+  evento: TrocaEvento | null;
+};
 
 export default function MatchesPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [trocas, setTrocas] = useState<Troca[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [aceitandoId, setAceitandoId] = useState<string | null>(null);
+  const [eventoModal, setEventoModal] = useState<TrocaEvento | null>(null);
 
   async function load() {
     setLoading(true);
@@ -21,8 +49,9 @@ export default function MatchesPage() {
       const res = await fetch("/api/matches");
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Erro");
-      setSuggestions(json.suggestions);
-      setTrocas(json.trocas);
+      setSuggestions(json.suggestions || []);
+      setTrocas(json.trocas || []);
+      setCurrentIndex(0);
     } catch (e: any) {
       toast.error(e?.message || "Erro ao carregar matches");
     } finally {
@@ -43,14 +72,23 @@ export default function MatchesPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Erro");
-      toast.success("Troca enviada!");
+      toast.success("Solicitação de troca enviada!");
+      
+      setSuggestions(prev => prev.filter((_, i) => i !== currentIndex));
+      setCurrentIndex(0);
       load();
     } catch (e: any) {
       toast.error(e?.message || "Erro ao enviar troca");
     }
   }
 
+  function passarSugestao() {
+    setSuggestions(prev => prev.filter((_, i) => i !== currentIndex));
+    setCurrentIndex(0);
+  }
+
   async function decidir(id: string, status: "aceito" | "recusado") {
+    setAceitandoId(id);
     try {
       const res = await fetch("/api/matches/decidir", {
         method: "POST",
@@ -59,96 +97,319 @@ export default function MatchesPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Erro");
-      toast.success("Atualizado");
+      
+      if (status === "aceito") {
+        if (json.eventoVinculado) {
+          toast.success("Troca aceita! Evento de troca vinculado.");
+        } else {
+          toast.warning("Troca aceita, mas não há evento de troca ativo no momento.");
+        }
+      } else {
+        toast.success("Troca recusada");
+      }
       load();
     } catch (e: any) {
       toast.error(e?.message || "Erro");
+    } finally {
+      setAceitandoId(null);
     }
   }
 
+  const currentSuggestion = suggestions[currentIndex];
+
+  const formatarData = (data: string) => {
+    return new Date(data).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
+  };
+
+  const formatarHorario = (data: string) => {
+    return new Date(data).toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
+
+  const formatarDataCompleta = (data: string) => {
+    return new Date(data).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
+
   return (
     <AppShell title="Matches">
-      <Card className="mb-4">
-        <CardHeader>
-          <CardTitle>Sugestões 💕</CardTitle>
-          <div className="text-sm text-yup-primary/70 dark:text-white/70">Trocas possíveis (sistema gera quando ambos têm o que o outro precisa).</div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-sm text-yup-primary/60">Carregando...</div>
-          ) : suggestions.length ? (
-            <div className="grid gap-3">
-              {suggestions.map((s, idx) => (
-                <Card key={idx} className="p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="text-2xl">{getAvatarById(s.userId)}</div>
-                      <div className="text-sm">
-                        <div className="font-semibold dark:text-white">#{s.yupId}</div>
-                        <div className="text-yup-primary/60 dark:text-white/60 text-xs">{s.cidade}</div>
-                      </div>
-                    </div>
-                    <div className="text-sm text-yup-primary/80 dark:text-white/80">
-                      Você dá <span className="font-semibold text-brincadeira-viva">{s.give}</span> e recebe{" "}
-                      <span className="font-semibold text-brincadeira-viva">{s.want}</span>
-                    </div>
-                    <Button onClick={() => criarTroca(s)} className="whitespace-nowrap">
-                      💚 Trocar
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+      <div className="max-w-2xl mx-auto">
+        {/* Seção de Sugestões */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="text-2xl">💕</span>
+              Sugestões para você
+            </CardTitle>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Pessoas que têm o que você precisa e precisam do que você tem repetido
             </div>
-          ) : (
-            <div className="text-sm text-yup-primary/60 dark:text-white/60">Sem sugestões no momento. Marque repetidas e faltantes no Álbum.</div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 border-4 border-brincadeira-viva border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : suggestions.length > 0 ? (
+              <>
+                <MatchCard
+                  suggestion={currentSuggestion}
+                  onTrocar={() => criarTroca(currentSuggestion)}
+                  onPassar={passarSugestao}
+                />
+                {suggestions.length > 1 && (
+                  <div className="text-center mt-4 text-sm text-gray-400">
+                    {currentIndex + 1} de {suggestions.length} sugestões
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <div className="text-5xl mb-3">🎉</div>
+                <p className="text-gray-600 dark:text-gray-400">Nenhuma sugestão no momento</p>
+                <p className="text-sm text-gray-500 dark:text-gray-500">
+                  Marque suas figurinhas repetidas e faltantes no álbum
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Trocas 📋</CardTitle>
-          <div className="text-sm text-yup-primary/70 dark:text-white/70">Pendentes, aceitas e recusadas.</div>
-        </CardHeader>
-        <CardContent>
-          {!trocas.length ? (
-            <div className="text-sm text-yup-primary/60 dark:text-white/60">Nenhuma troca ainda.</div>
-          ) : (
-            <div className="grid gap-3">
-              {trocas.map((t) => (
-                <Card key={t.id} className="p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="text-2xl">{getAvatarById(t.from === "Você" ? t.to : t.from)}</div>
-                      <div className="text-sm text-yup-primary/70 dark:text-white/70">
-                        {t.from} → {t.to}
+        {/* Seção de Trocas */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <span className="text-2xl">📋</span>
+              Minhas Trocas
+            </CardTitle>
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              Solicitações enviadas e recebidas
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-8 h-8 border-4 border-brincadeira-viva border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : trocas.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-5xl mb-3">📭</div>
+                <p className="text-gray-600 dark:text-gray-400">Nenhuma troca ainda</p>
+                <p className="text-sm text-gray-500 dark:text-gray-500">
+                  Envie solicitações para outros colecionadores
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {trocas.map((t) => (
+                  <div 
+                    key={t.id} 
+                    className={`bg-white dark:bg-[#1a1a2e] rounded-xl p-4 border transition-all cursor-pointer ${
+                      t.status === "aceito" ? "hover:shadow-lg hover:border-brincadeira-viva/50" : ""
+                    } ${
+                      t.status === "pendente" && t.to === "Você"
+                        ? "border-yellow-300 dark:border-yellow-700 shadow-md"
+                        : "border-gray-200 dark:border-gray-800"
+                    }`}
+                    onClick={() => {
+                      if (t.status === "aceito" && t.evento) {
+                        setEventoModal(t.evento);
+                      }
+                    }}
+                  >
+                    {/* Cabeçalho com usuários */}
+                    <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-800 dark:text-white">
+                          {t.from}
+                        </span>
+                        <span className="text-gray-400">→</span>
+                        <span className="font-semibold text-gray-800 dark:text-white">
+                          {t.to}
+                        </span>
                       </div>
-                    </div>
-                    <div className="text-sm">
-                      {t.figurinhaA} ↔ {t.figurinhaB}
-                    </div>
-                    <div className="text-sm">
-                      <span className="rounded-full px-2 py-0.5 bg-white/60 dark:bg-noite-serena/60 border border-yup-primary/10">
-                        {t.status === "pendente" ? "⏳ Pendente" : t.status === "aceito" ? "✅ Aceito" : "❌ Recusado"}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        t.status === "pendente" 
+                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                          : t.status === "aceito" 
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                      }`}>
+                        {t.status === "pendente" && "⏳ Pendente"}
+                        {t.status === "aceito" && "✅ Aceito"}
+                        {t.status === "recusado" && "❌ Recusado"}
                       </span>
                     </div>
-                    {t.status === "pendente" ? (
-                      <div className="flex gap-2">
-                        <Button variant="secondary" onClick={() => decidir(t.id, "aceito")}>
-                          Aceitar
-                        </Button>
-                        <Button variant="ghost" onClick={() => decidir(t.id, "recusado")}>
-                          Recusar
-                        </Button>
+
+                    {/* Figurinhas da troca */}
+                    <div className="flex items-center justify-center gap-4 my-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                      <div className="text-center">
+                        <div className="text-2xl mb-1">🎁</div>
+                        <div className="font-bold text-brincadeira-viva">{t.figurinhaA}</div>
+                        <div className="text-xs text-gray-500">{t.from === "Você" ? "Você dá" : "Você recebe"}</div>
                       </div>
-                    ) : null}
+                      <div className="text-xl text-gray-400">↔️</div>
+                      <div className="text-center">
+                        <div className="text-2xl mb-1">✨</div>
+                        <div className="font-bold text-brincadeira-viva">{t.figurinhaB}</div>
+                        <div className="text-xs text-gray-500">{t.from === "Você" ? "Você recebe" : "Você dá"}</div>
+                      </div>
+                    </div>
+
+                    {/* Mini info do evento (se aceito) */}
+                    {t.status === "aceito" && t.evento && (
+                      <div className="mt-2 text-center">
+                        <span className="text-xs text-brincadeira-viva flex items-center justify-center gap-1">
+                          <Calendar size={12} />
+                          {formatarData(t.evento.dataInicio)} • {formatarHorario(t.evento.dataInicio)}
+                          <span className="text-gray-400 mx-1">—</span>
+                          <MapPin size={12} />
+                          {t.evento.localNome}
+                        </span>
+                        <p className="text-[10px] text-gray-400 mt-1">Clique no card para ver detalhes</p>
+                      </div>
+                    )}
+
+                    {/* Botões de ação (apenas para trocas pendentes onde o usuário é o destinatário) */}
+                    {t.status === "pendente" && t.to === "Você" && (
+                      <div className="flex gap-3 mt-4">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            decidir(t.id, "aceito");
+                          }}
+                          disabled={aceitandoId === t.id}
+                          className="flex-1 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors disabled:opacity-50"
+                        >
+                          {aceitandoId === t.id ? "Processando..." : "✅ Aceitar"}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            decidir(t.id, "recusado");
+                          }}
+                          disabled={aceitandoId === t.id}
+                          className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors disabled:opacity-50"
+                        >
+                          ❌ Recusar
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </Card>
-              ))}
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Modal de Detalhes do Evento */}
+      {eventoModal && (
+        <div 
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          onClick={() => setEventoModal(null)}
+        >
+          <div 
+            className="bg-white dark:bg-[#1a1a2e] rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="sticky top-0 bg-white dark:bg-[#1a1a2e] border-b border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🎪</span>
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
+                  Detalhes do Evento
+                </h2>
+              </div>
+              <button
+                onClick={() => setEventoModal(null)}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {/* Conteúdo */}
+            <div className="p-5 space-y-5">
+              {/* Título */}
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-brincadeira-viva">
+                  {eventoModal.titulo}
+                </h3>
+              </div>
+
+              {/* Data e Horário */}
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Calendar size={22} className="text-brincadeira-viva flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Data e Horário</p>
+                    <p className="text-base font-semibold text-gray-800 dark:text-white">
+                      {formatarDataCompleta(eventoModal.dataInicio)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Clock size={22} className="text-brincadeira-viva flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Até</p>
+                    <p className="text-base font-semibold text-gray-800 dark:text-white">
+                      {formatarDataCompleta(eventoModal.dataFim)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Localização */}
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <MapPin size={22} className="text-brincadeira-viva flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Local</p>
+                    <p className="text-base font-semibold text-gray-800 dark:text-white mb-2">
+                      {eventoModal.localNome}
+                    </p>
+                    <a
+                      href={eventoModal.localUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-sm text-brincadeira-viva hover:underline bg-brincadeira-viva/10 px-3 py-2 rounded-lg transition-colors"
+                    >
+                      <LinkIcon size={16} />
+                      Abrir no Google Maps
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informação adicional */}
+              <div className="text-center text-xs text-gray-500 dark:text-gray-400 pt-2">
+                <p>📌 Apresente seu ID no local para realizar a troca</p>
+                <p className="mt-1">🎁 Não esqueça de levar suas figurinhas repetidas!</p>
+              </div>
+
+              {/* Botão fechar */}
+              <button
+                onClick={() => setEventoModal(null)}
+                className="w-full py-3 rounded-xl bg-brincadeira-viva text-white font-semibold hover:bg-brincadeira-viva/80 transition-colors"
+              >
+                Entendi, obrigado!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
