@@ -5,6 +5,7 @@ import { Usuario } from "@/models/Usuario";
 import { UsuarioFigurinha } from "@/models/UsuarioFigurinha";
 import { Troca } from "@/models/Troca";
 import { EventoTroca } from "@/models/EventoTroca";
+import { Notificacao } from "@/models/Notificacao";
 import { jsonError, jsonOk } from "@/lib/http";
 import mongoose from "mongoose";
 
@@ -13,19 +14,16 @@ export async function GET() {
     const payload = await requireAuth();
     await connectMongo();
 
-    // Buscar o _id do usuário logado
     const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id").lean();
     if (!usuario) {
       return jsonError("Usuário não encontrado", 404);
     }
     const userId = usuario._id;
 
-    // Buscar repetidas e faltantes do usuário
     const allMineMarks = await UsuarioFigurinha.find({ userId: userId }).select("codigo possui repetida").lean();
     const repetidas = allMineMarks.filter((m) => m.repetida).map((m) => m.codigo);
     const faltantes = allMineMarks.filter((m) => !m.possui).map((m) => m.codigo);
 
-    // Buscar outros usuários que têm o que eu preciso
     const othersHaveWhatINeed = faltantes.length
       ? await UsuarioFigurinha.find({ 
           codigo: { $in: faltantes }, 
@@ -57,7 +55,6 @@ export async function GET() {
       const u = await Usuario.findById(otherId).select("yupId cidade").lean();
       if (!u) continue;
 
-      // Gerar avatar consistente
       const avatarIndex = otherId.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
       const avatares = ["🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼", "🐨", "🐸", "🐙", "🦄"];
       const avatar = avatares[avatarIndex % avatares.length];
@@ -73,7 +70,6 @@ export async function GET() {
       if (suggestions.length >= 25) break;
     }
 
-    // Buscar trocas do usuário com informações de evento
     const trocas = await Troca.find({ 
       $or: [{ userA: userId }, { userB: userId }] 
     })
@@ -85,7 +81,6 @@ export async function GET() {
     const users = await Usuario.find({ _id: { $in: ids } }).select("yupId").lean();
     const uMap = new Map(users.map((u) => [String(u._id), u.yupId]));
 
-    // Buscar eventos para trocas aceitas
     const eventoIds = trocas.filter(t => t.eventoId).map(t => t.eventoId);
     const eventos = await EventoTroca.find({ _id: { $in: eventoIds } }).lean();
     const eventoMap = new Map(eventos.map(e => [String(e._id), e]));
@@ -94,7 +89,6 @@ export async function GET() {
       suggestions,
       trocas: trocas.map((t) => {
         const isUserA = String(t.userA) === String(userId);
-        const outroUsuario = isUserA ? t.userB : t.userA;
         const evento = t.eventoId ? eventoMap.get(String(t.eventoId)) : null;
         
         return {
@@ -136,22 +130,18 @@ export async function POST(req: Request) {
     const data = CreateSchema.parse(body);
     await connectMongo();
 
-    // Buscar o _id do usuário logado
-    const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id").lean();
+    const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id yupId").lean();
     if (!usuario) {
       return jsonError("Usuário não encontrado", 404);
     }
     const userId = usuario._id;
 
-    // Buscar o usuário destino (pode ser por yupId ou _id)
     let userBDestino = null;
     
-    // Tentar buscar por _id primeiro
     if (mongoose.Types.ObjectId.isValid(data.userB)) {
       userBDestino = await Usuario.findById(data.userB).select("_id yupId").lean();
     }
     
-    // Se não encontrou, buscar por yupId
     if (!userBDestino) {
       userBDestino = await Usuario.findOne({ yupId: data.userB }).select("_id yupId").lean();
     }
@@ -163,7 +153,6 @@ export async function POST(req: Request) {
 
     console.log("UserA:", userId, "UserB:", userBDestino._id);
 
-    // Verificar se já existe uma troca pendente entre os dois para as mesmas figurinhas
     const trocaExistente = await Troca.findOne({
       $or: [
         { userA: userId, userB: userBDestino._id, figurinhaA: data.figurinhaA, figurinhaB: data.figurinhaB, status: "pendente" },
@@ -184,6 +173,21 @@ export async function POST(req: Request) {
     });
 
     console.log("Troca criada:", troca._id);
+
+    // Criar notificação para o usuário destino
+    await Notificacao.create({
+      userId: userBDestino._id,
+      tipo: "solicitacao_troca",
+      titulo: "Nova solicitação de troca!",
+      mensagem: `${usuario.yupId} quer trocar ${data.figurinhaA} por ${data.figurinhaB} com você`,
+      dados: {
+        trocaId: String(troca._id),
+        usuarioYupId: usuario.yupId,
+        figurinhaA: data.figurinhaA,
+        figurinhaB: data.figurinhaB
+      },
+      lida: false
+    });
 
     return jsonOk({ troca: { id: String(troca._id) } }, { status: 201 });
   } catch (err: any) {

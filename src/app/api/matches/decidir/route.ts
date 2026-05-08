@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth-request";
 import { Troca } from "@/models/Troca";
 import { EventoTroca } from "@/models/EventoTroca";
 import { Usuario } from "@/models/Usuario";
+import { Notificacao } from "@/models/Notificacao";
 import { jsonError, jsonOk } from "@/lib/http";
 
 const Schema = z.object({
@@ -19,8 +20,7 @@ export async function POST(req: Request) {
 
     await connectMongo();
 
-    // Buscar o _id do usuário logado
-    const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id").lean();
+    const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id yupId").lean();
     if (!usuario) {
       return jsonError("Usuário não encontrado", 404);
     }
@@ -29,7 +29,6 @@ export async function POST(req: Request) {
     const troca = await Troca.findById(data.id);
     if (!troca) return jsonError("Troca não encontrada", 404);
 
-    // Verificar permissão (apenas userB pode aceitar/recusar)
     if (String(troca.userB) !== String(userId)) {
       return jsonError("Sem permissão", 403);
     }
@@ -37,14 +36,14 @@ export async function POST(req: Request) {
       return jsonError("Troca já foi decidida", 409);
     }
 
-    // Se for aceito, vincular ao próximo evento ativo (futuro OU atual)
+    // Buscar o usuário A para notificação
+    const userA = await Usuario.findById(troca.userA).select("yupId").lean();
+
     if (data.status === "aceito") {
       const agora = new Date();
-      
-      // Buscar eventos ativos que começam hoje ou no futuro, ou que já estão acontecendo
       const proximoEvento = await EventoTroca.findOne({
         ativo: true,
-        dataFim: { $gte: agora } // Evento que ainda não terminou
+        dataFim: { $gte: agora }
       }).sort({ dataInicio: 1 }).lean();
 
       console.log("Próximo evento encontrado:", proximoEvento?._id, proximoEvento?.titulo);
@@ -55,8 +54,38 @@ export async function POST(req: Request) {
         troca.localTroca = proximoEvento.localNome;
         console.log("Evento vinculado à troca:", troca.eventoId);
       } else {
-        console.log("NENHUM evento ativo encontrado. Verifique se existe evento com ativo=true e dataFim >= hoje");
+        console.log("NENHUM evento ativo encontrado.");
       }
+      
+      // Notificação para quem solicitou (userA)
+      await Notificacao.create({
+        userId: troca.userA,
+        tipo: "troca_aceita",
+        titulo: "Sua troca foi aceita! 🎉",
+        mensagem: `${usuario.yupId} aceitou trocar ${troca.figurinhaB} por ${troca.figurinhaA}`,
+        dados: {
+          trocaId: String(troca._id),
+          usuarioYupId: usuario.yupId,
+          figurinhaA: troca.figurinhaA,
+          figurinhaB: troca.figurinhaB
+        },
+        lida: false
+      });
+    } else {
+      // Notificação para quem solicitou (userA) - troca recusada
+      await Notificacao.create({
+        userId: troca.userA,
+        tipo: "troca_recusada",
+        titulo: "Troca recusada",
+        mensagem: `${usuario.yupId} recusou trocar ${troca.figurinhaB} por ${troca.figurinhaA}`,
+        dados: {
+          trocaId: String(troca._id),
+          usuarioYupId: usuario.yupId,
+          figurinhaA: troca.figurinhaA,
+          figurinhaB: troca.figurinhaB
+        },
+        lida: false
+      });
     }
 
     troca.status = data.status;
@@ -65,12 +94,9 @@ export async function POST(req: Request) {
     console.log("Troca salva:", { 
       id: troca._id, 
       status: troca.status, 
-      eventoId: troca.eventoId,
-      dataTroca: troca.dataTroca,
-      localTroca: troca.localTroca
+      eventoId: troca.eventoId
     });
 
-    // Buscar o evento para retornar na resposta
     let eventoData = null;
     if (troca.eventoId) {
       const evento = await EventoTroca.findById(troca.eventoId).lean();
