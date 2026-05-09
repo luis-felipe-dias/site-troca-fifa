@@ -20,7 +20,7 @@ export async function GET() {
   }
 }
 
-// POST - Criar novo evento
+// POST - Criar novo evento (CORRIGIDO - SEM CONVERSÃO DE FUSO)
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireAdmin();
@@ -37,11 +37,32 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // CRIA AS DATAS DIRETAMENTE (SEM CONVERSÃO DE FUSO)
+    const dataInicioDate = new Date(dataInicio);
+    const dataFimDate = new Date(dataFim);
+    
+    // Validação: dataInicio deve ser antes de dataFim
+    if (dataInicioDate >= dataFimDate) {
+      return NextResponse.json(
+        { error: "A data de início deve ser anterior à data de fim" },
+        { status: 400 }
+      );
+    }
+    
+    // Validação: não pode criar evento no passado
+    const agora = new Date();
+    if (dataInicioDate < agora) {
+      return NextResponse.json(
+        { error: "Não é possível criar evento com data no passado" },
+        { status: 400 }
+      );
+    }
+    
     const evento = await EventoTroca.create({
       titulo,
       descricao,
-      dataInicio: new Date(dataInicio),
-      dataFim: new Date(dataFim),
+      dataInicio: dataInicioDate,
+      dataFim: dataFimDate,
       localNome,
       localUrl,
       localPreset,

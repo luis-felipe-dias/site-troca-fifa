@@ -137,60 +137,125 @@ export default function AdminClient() {
     }
   };
 
+  // FUNÇÃO CORRIGIDA - SEM CONVERSÃO DE FUSO
   const handleSubmitEvento = async () => {
     if (!formData.titulo || !formData.dataInicio || !formData.dataFim || !formData.localNome || !formData.localUrl) {
       toast.error("Preencha todos os campos obrigatorios");
       return;
     }
 
+    // CRIA AS DATAS DIRETAMENTE DO INPUT (SEM CONVERSÃO DE FUSO)
+    const dataInicio = new Date(formData.dataInicio);
+    const dataFim = new Date(formData.dataFim);
+
+    // VALIDAÇÃO: dataInicio deve ser ANTES de dataFim
+    if (dataInicio >= dataFim) {
+      toast.error("A data de início deve ser anterior à data de fim!");
+      return;
+    }
+
+    // VALIDAÇÃO: não pode criar evento no passado
+    const agora = new Date();
+    if (dataInicio < agora) {
+      toast.error("Não é possível criar evento com data no passado!");
+      return;
+    }
+
     const url = editingEvent ? `/api/admin/eventos/${editingEvent._id}` : "/api/admin/eventos";
     const method = editingEvent ? "PUT" : "POST";
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData)
-    });
+    const payload = {
+      titulo: formData.titulo,
+      descricao: formData.descricao,
+      dataInicio: dataInicio.toISOString(),
+      dataFim: dataFim.toISOString(),
+      localNome: formData.localNome,
+      localUrl: formData.localUrl,
+      localPreset: formData.localPreset,
+      ativo: editingEvent ? undefined : true
+    };
 
-    if (res.ok) {
-      toast.success(editingEvent ? "Evento atualizado!" : "Evento criado!");
-      setShowEventModal(false);
-      setEditingEvent(null);
-      setFormData({
-        titulo: "",
-        descricao: "",
-        dataInicio: "",
-        dataFim: "",
-        localNome: "",
-        localUrl: "",
-        localPreset: ""
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
       });
-      loadEventos();
-    } else {
-      const error = await res.json();
-      toast.error(error.error || "Erro ao salvar evento");
-    }
-  };
 
-  const handleDeleteEvento = async (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este evento?")) {
-      const res = await fetch(`/api/admin/eventos/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      
       if (res.ok) {
-        toast.success("Evento removido!");
+        toast.success(editingEvent ? "Evento atualizado!" : "Evento criado!");
+        setShowEventModal(false);
+        setEditingEvent(null);
+        setFormData({
+          titulo: "",
+          descricao: "",
+          dataInicio: "",
+          dataFim: "",
+          localNome: "",
+          localUrl: "",
+          localPreset: ""
+        });
         loadEventos();
       } else {
-        toast.error("Erro ao remover evento");
+        toast.error(data.error || "Erro ao salvar evento");
       }
+    } catch (error) {
+      toast.error("Erro de conexão ao salvar evento");
     }
   };
 
+  // FUNÇÃO CORRIGIDA - SEM CONVERSÃO DE FUSO
+  const handleDeleteEvento = async (id: string) => {
+    if (!id || id === "undefined" || id === "null") {
+      toast.error("ID do evento inválido");
+      return;
+    }
+    
+    if (!confirm("Tem certeza que deseja excluir este evento?")) {
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/admin/eventos/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      
+      if (res.ok) {
+        toast.success("Evento removido com sucesso!");
+        loadEventos();
+      } else {
+        toast.error(data.error || "Erro ao remover evento");
+      }
+    } catch (error) {
+      console.error("Erro ao deletar:", error);
+      toast.error("Erro de conexão ao remover evento");
+    }
+  };
+
+  // FUNÇÃO CORRIGIDA - MOSTRA O HORÁRIO CORRETO NO EDIT
   const handleEditEvento = (evento: Evento) => {
+    if (!evento || !evento._id) {
+      toast.error("Evento inválido");
+      return;
+    }
+    
+    // PEGA AS DATAS DIRETAMENTE DO BANCO (JÁ ESTÃO NO FORMATO CORRETO)
+    const dataInicio = new Date(evento.dataInicio);
+    const dataFim = new Date(evento.dataFim);
+    
+    // AJUSTA PARA MOSTRAR NO INPUT datetime-local
+    // Subtrai o offset para mostrar o horário que está no banco
+    const offset = dataInicio.getTimezoneOffset();
+    const dataInicioLocal = new Date(dataInicio.getTime() - (offset * 60000));
+    const dataFimLocal = new Date(dataFim.getTime() - (offset * 60000));
+    
     setEditingEvent(evento);
     setFormData({
       titulo: evento.titulo,
       descricao: evento.descricao || "",
-      dataInicio: evento.dataInicio.split(".")[0].slice(0, 16),
-      dataFim: evento.dataFim.split(".")[0].slice(0, 16),
+      dataInicio: dataInicioLocal.toISOString().slice(0, 16),
+      dataFim: dataFimLocal.toISOString().slice(0, 16),
       localNome: evento.localNome,
       localUrl: evento.localUrl,
       localPreset: evento.localPreset || ""
@@ -204,21 +269,26 @@ export default function AdminClient() {
       return;
     }
     
-    const res = await fetch(`/api/admin/users/${selectedUser?._id}/reset-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ senhaTemporaria: novaSenha })
-    });
-    
-    if (res.ok) {
-      toast.success("Senha redefinida! Envie a senha para o usuario.");
-      setShowResetModal(false);
-      setNovaSenha("");
-      setSelectedUser(null);
-      loadUsuarios();
-    } else {
-      const error = await res.json();
-      toast.error(error.error || "Erro ao resetar senha");
+    try {
+      const res = await fetch(`/api/admin/users/${selectedUser?._id}/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senhaTemporaria: novaSenha })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        toast.success("Senha redefinida! Envie a senha para o usuario.");
+        setShowResetModal(false);
+        setNovaSenha("");
+        setSelectedUser(null);
+        loadUsuarios();
+      } else {
+        toast.error(data.error || "Erro ao resetar senha");
+      }
+    } catch (error) {
+      toast.error("Erro de conexão ao resetar senha");
     }
   };
 
@@ -268,7 +338,6 @@ export default function AdminClient() {
         {/* TAB: USUARIOS */}
         {activeTab === "usuarios" && (
           <div>
-            {/* Busca */}
             <div className="mb-4">
               <input
                 type="text"
@@ -279,7 +348,6 @@ export default function AdminClient() {
               />
             </div>
 
-            {/* Cards de usuarios */}
             <div className="grid gap-3">
               {usuarios.map((user) => (
                 <div key={user._id} className="bg-white dark:bg-[#1a1a2e] rounded-xl p-4 border border-gray-200 dark:border-gray-800">
@@ -340,7 +408,6 @@ export default function AdminClient() {
               ))}
             </div>
 
-            {/* Paginacao */}
             {pagination && pagination.totalPages > 1 && (
               <div className="flex items-center justify-between mt-4">
                 <div className="text-sm text-gray-500">
@@ -387,7 +454,7 @@ export default function AdminClient() {
                 });
                 setShowEventModal(true);
               }}
-              className="mb-4 px-4 py-2 rounded-lg bg-brincadeira-viva text-white text-sm font-medium"
+              className="mb-4 px-4 py-2 rounded-lg bg-brincadeira-viva text-white text-sm font-medium hover:bg-brincadeira-viva/90 transition-colors"
             >
               + Novo Evento de Troca
             </button>
@@ -416,7 +483,8 @@ export default function AdminClient() {
                         <p className="text-gray-500 text-sm mt-1">{evento.descricao}</p>
                       )}
                       <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
-                        <span>📅 {new Date(evento.dataInicio).toLocaleDateString()} - {new Date(evento.dataFim).toLocaleDateString()}</span>
+                        <span>📅 Início: {new Date(evento.dataInicio).toLocaleString()}</span>
+                        <span>🏁 Fim: {new Date(evento.dataFim).toLocaleString()}</span>
                         <span>📍 {evento.localNome}</span>
                         <a href={evento.localUrl} target="_blank" rel="noopener noreferrer" className="text-brincadeira-viva hover:underline">
                           🗺️ Ver mapa
@@ -424,10 +492,16 @@ export default function AdminClient() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => handleEditEvento(evento)} className="p-2 rounded-lg hover:bg-gray-100">
+                      <button 
+                        onClick={() => handleEditEvento(evento)} 
+                        className="px-3 py-1 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors text-sm"
+                      >
                         Editar
                       </button>
-                      <button onClick={() => handleDeleteEvento(evento._id)} className="p-2 rounded-lg hover:bg-red-100 text-red-500">
+                      <button 
+                        onClick={() => handleDeleteEvento(evento._id)} 
+                        className="px-3 py-1 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors text-sm"
+                      >
                         Excluir
                       </button>
                     </div>
@@ -443,7 +517,7 @@ export default function AdminClient() {
       {showResetModal && selectedUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-[#1a1a2e] rounded-2xl max-w-md w-full">
-            <div className="p-4 border-b">
+            <div className="p-4 border-b dark:border-gray-700">
               <h2 className="text-xl font-semibold">Resetar Senha</h2>
             </div>
             <div className="p-4 space-y-4">
@@ -454,13 +528,23 @@ export default function AdminClient() {
                 value={novaSenha}
                 onChange={(e) => setNovaSenha(e.target.value)}
                 placeholder="Senha temporaria"
-                className="w-full p-2 rounded-lg border"
+                className="w-full p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-[#0d0d1a]"
               />
               <div className="flex gap-3">
-                <button onClick={() => setShowResetModal(false)} className="flex-1 py-2 rounded-lg bg-gray-200">
+                <button 
+                  onClick={() => {
+                    setShowResetModal(false);
+                    setNovaSenha("");
+                    setSelectedUser(null);
+                  }} 
+                  className="flex-1 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 transition-colors"
+                >
                   Cancelar
                 </button>
-                <button onClick={handleResetPassword} className="flex-1 py-2 rounded-lg bg-brincadeira-viva text-white">
+                <button 
+                  onClick={handleResetPassword} 
+                  className="flex-1 py-2 rounded-lg bg-brincadeira-viva text-white hover:bg-brincadeira-viva/90 transition-colors"
+                >
                   Resetar
                 </button>
               </div>
@@ -473,25 +557,76 @@ export default function AdminClient() {
       {showEventModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-[#1a1a2e] rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b">
+            <div className="p-4 border-b dark:border-gray-700">
               <h2 className="text-xl font-semibold">{editingEvent ? "Editar Evento" : "Novo Evento"}</h2>
             </div>
             <div className="p-4 space-y-4">
-              <input type="text" value={formData.titulo} onChange={(e) => setFormData(prev => ({ ...prev, titulo: e.target.value }))} placeholder="Titulo" className="w-full p-2 rounded-lg border" />
-              <textarea value={formData.descricao} onChange={(e) => setFormData(prev => ({ ...prev, descricao: e.target.value }))} placeholder="Descricao" rows={2} className="w-full p-2 rounded-lg border" />
+              <input 
+                type="text" 
+                value={formData.titulo} 
+                onChange={(e) => setFormData(prev => ({ ...prev, titulo: e.target.value }))} 
+                placeholder="Titulo" 
+                className="w-full p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-[#0d0d1a]"
+              />
+              <textarea 
+                value={formData.descricao} 
+                onChange={(e) => setFormData(prev => ({ ...prev, descricao: e.target.value }))} 
+                placeholder="Descricao" 
+                rows={2} 
+                className="w-full p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-[#0d0d1a]"
+              />
               <div className="grid grid-cols-2 gap-3">
-                <input type="datetime-local" value={formData.dataInicio} onChange={(e) => setFormData(prev => ({ ...prev, dataInicio: e.target.value }))} className="w-full p-2 rounded-lg border" />
-                <input type="datetime-local" value={formData.dataFim} onChange={(e) => setFormData(prev => ({ ...prev, dataFim: e.target.value }))} className="w-full p-2 rounded-lg border" />
+                <input 
+                  type="datetime-local" 
+                  value={formData.dataInicio} 
+                  onChange={(e) => setFormData(prev => ({ ...prev, dataInicio: e.target.value }))} 
+                  className="w-full p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-[#0d0d1a]"
+                />
+                <input 
+                  type="datetime-local" 
+                  value={formData.dataFim} 
+                  onChange={(e) => setFormData(prev => ({ ...prev, dataFim: e.target.value }))} 
+                  className="w-full p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-[#0d0d1a]"
+                />
               </div>
-              <select value={formData.localPreset} onChange={(e) => handlePresetChange(e.target.value)} className="w-full p-2 rounded-lg border">
+              <select 
+                value={formData.localPreset} 
+                onChange={(e) => handlePresetChange(e.target.value)} 
+                className="w-full p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-[#0d0d1a]"
+              >
                 <option value="">Local pre-salvo</option>
                 {LOCAIS_PRESET.map(loc => <option key={loc.nome} value={loc.nome}>{loc.nome}</option>)}
               </select>
-              <input type="text" value={formData.localNome} onChange={(e) => setFormData(prev => ({ ...prev, localNome: e.target.value }))} placeholder="Nome do Local" className="w-full p-2 rounded-lg border" />
-              <input type="url" value={formData.localUrl} onChange={(e) => setFormData(prev => ({ ...prev, localUrl: e.target.value }))} placeholder="Link Google Maps" className="w-full p-2 rounded-lg border" />
-              <div className="flex gap-3">
-                <button onClick={() => setShowEventModal(false)} className="flex-1 py-2 rounded-lg bg-gray-200">Cancelar</button>
-                <button onClick={handleSubmitEvento} className="flex-1 py-2 rounded-lg bg-brincadeira-viva text-white">{editingEvent ? "Salvar" : "Criar"}</button>
+              <input 
+                type="text" 
+                value={formData.localNome} 
+                onChange={(e) => setFormData(prev => ({ ...prev, localNome: e.target.value }))} 
+                placeholder="Nome do Local" 
+                className="w-full p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-[#0d0d1a]"
+              />
+              <input 
+                type="url" 
+                value={formData.localUrl} 
+                onChange={(e) => setFormData(prev => ({ ...prev, localUrl: e.target.value }))} 
+                placeholder="Link Google Maps" 
+                className="w-full p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-[#0d0d1a]"
+              />
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => {
+                    setShowEventModal(false);
+                    setEditingEvent(null);
+                  }} 
+                  className="flex-1 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSubmitEvento} 
+                  className="flex-1 py-2 rounded-lg bg-brincadeira-viva text-white hover:bg-brincadeira-viva/90 transition-colors"
+                >
+                  {editingEvent ? "Salvar" : "Criar"}
+                </button>
               </div>
             </div>
           </div>

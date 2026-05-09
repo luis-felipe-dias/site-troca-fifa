@@ -10,7 +10,7 @@ export async function GET() {
 
     const agora = new Date();
     
-    // Buscar próximo evento ativo com dataInicio >= hoje
+    // Buscar próximo evento ativo com dataInicio >= agora
     const proximoEvento = await EventoTroca.findOne({
       ativo: true,
       dataInicio: { $gte: agora }

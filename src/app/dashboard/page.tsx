@@ -75,7 +75,7 @@ export default function DashboardPage() {
     minutos: 0,
     segundos: 0
   });
-  const [eventoPassado, setEventoPassado] = useState(false);
+  const [statusEvento, setStatusEvento] = useState<"aguardando" | "acontecendo" | "encerrado">("aguardando");
 
   // Buscar notificações com paginação e filtro
   const fetchNotificacoes = useCallback(async (page: number, filtro: string) => {
@@ -145,22 +145,32 @@ export default function DashboardPage() {
     }
   };
 
-  // Cronômetro
+  // Cronômetro corrigido
   useEffect(() => {
     if (!proximoEvento) return;
 
     const calcularTempo = () => {
-      const agora = new Date().getTime();
-      const evento = new Date(proximoEvento.dataInicio).getTime();
-      const diferenca = evento - agora;
+      const agora = new Date();
+      const eventoInicio = new Date(proximoEvento.dataInicio);
+      const eventoFim = new Date(proximoEvento.dataFim);
 
-      if (diferenca <= 0) {
-        setEventoPassado(true);
+      // Verifica se o evento já começou
+      if (agora >= eventoInicio) {
+        // Verifica se o evento já terminou
+        if (agora >= eventoFim) {
+          setStatusEvento("encerrado");
+          setTempoRestante({ dias: 0, horas: 0, minutos: 0, segundos: 0 });
+          return;
+        }
+        // Evento em andamento
+        setStatusEvento("acontecendo");
         setTempoRestante({ dias: 0, horas: 0, minutos: 0, segundos: 0 });
         return;
       }
 
-      setEventoPassado(false);
+      // Evento futuro - calcula diferença
+      setStatusEvento("aguardando");
+      const diferenca = eventoInicio.getTime() - agora.getTime();
       setTempoRestante({
         dias: Math.floor(diferenca / (1000 * 60 * 60 * 24)),
         horas: Math.floor((diferenca % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
@@ -271,40 +281,51 @@ export default function DashboardPage() {
                 </a>
               </div>
 
-              {!eventoPassado ? (
-                <div className="flex justify-center gap-6 py-3">
-                  <div className="text-center bg-white/50 dark:bg-black/20 rounded-xl px-4 py-2 min-w-[70px]">
-                    <div className="text-3xl font-bold text-brincadeira-viva">{tempoRestante.dias}</div>
-                    <div className="text-[10px] text-gray-500">dias</div>
+              {statusEvento === "aguardando" && (
+                <>
+                  <div className="flex justify-center gap-6 py-3">
+                    <div className="text-center bg-white/50 dark:bg-black/20 rounded-xl px-4 py-2 min-w-[70px]">
+                      <div className="text-3xl font-bold text-brincadeira-viva">{tempoRestante.dias}</div>
+                      <div className="text-[10px] text-gray-500">dias</div>
+                    </div>
+                    <div className="text-center bg-white/50 dark:bg-black/20 rounded-xl px-4 py-2 min-w-[70px]">
+                      <div className="text-3xl font-bold text-brincadeira-viva">{tempoRestante.horas}</div>
+                      <div className="text-[10px] text-gray-500">horas</div>
+                    </div>
+                    <div className="text-center bg-white/50 dark:bg-black/20 rounded-xl px-4 py-2 min-w-[70px]">
+                      <div className="text-3xl font-bold text-brincadeira-viva">{tempoRestante.minutos}</div>
+                      <div className="text-[10px] text-gray-500">min</div>
+                    </div>
+                    <div className="text-center bg-white/50 dark:bg-black/20 rounded-xl px-4 py-2 min-w-[70px]">
+                      <div className="text-3xl font-bold text-brincadeira-viva">{tempoRestante.segundos}</div>
+                      <div className="text-[10px] text-gray-500">seg</div>
+                    </div>
                   </div>
-                  <div className="text-center bg-white/50 dark:bg-black/20 rounded-xl px-4 py-2 min-w-[70px]">
-                    <div className="text-3xl font-bold text-brincadeira-viva">{tempoRestante.horas}</div>
-                    <div className="text-[10px] text-gray-500">horas</div>
+                  <div className="flex justify-center gap-4 text-xs text-gray-500">
+                    <span className="flex items-center gap-1"><Calendar size={12} /> {formatarData(proximoEvento.dataInicio)}</span>
+                    <span className="flex items-center gap-1"><Clock size={12} /> {formatarHorario(proximoEvento.dataInicio)}</span>
                   </div>
-                  <div className="text-center bg-white/50 dark:bg-black/20 rounded-xl px-4 py-2 min-w-[70px]">
-                    <div className="text-3xl font-bold text-brincadeira-viva">{tempoRestante.minutos}</div>
-                    <div className="text-[10px] text-gray-500">min</div>
-                  </div>
-                  <div className="text-center bg-white/50 dark:bg-black/20 rounded-xl px-4 py-2 min-w-[70px]">
-                    <div className="text-3xl font-bold text-brincadeira-viva">{tempoRestante.segundos}</div>
-                    <div className="text-[10px] text-gray-500">seg</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-3 bg-green-100 dark:bg-green-900/30 rounded-xl">
-                  <span className="text-green-600 font-semibold">🎉 Evento em andamento! Corra para a loja! 🎉</span>
+                </>
+              )}
+
+              {statusEvento === "acontecendo" && (
+                <div className="text-center py-4 bg-green-100 dark:bg-green-900/30 rounded-xl animate-pulse">
+                  <span className="text-green-600 font-semibold text-lg">🎉 EVENTO ACONTECENDO AGORA! 🎉</span>
+                  <p className="text-sm text-green-500 mt-1">Corra para a loja realizar suas trocas!</p>
                 </div>
               )}
 
-              <div className="flex justify-center gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><Calendar size={12} /> {formatarData(proximoEvento.dataInicio)}</span>
-                <span className="flex items-center gap-1"><Clock size={12} /> {formatarHorario(proximoEvento.dataInicio)}</span>
-              </div>
+              {statusEvento === "encerrado" && (
+                <div className="text-center py-4 bg-gray-100 dark:bg-gray-800/30 rounded-xl">
+                  <span className="text-gray-600 font-semibold">🏁 Evento encerrado 🏁</span>
+                  <p className="text-sm text-gray-500 mt-1">Aguardem o próximo evento!</p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Progresso do Álbum */}
+        {/* Progresso do Álbum (mesmo código, não precisa mudar) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
