@@ -63,7 +63,7 @@ export default function Sidebar() {
     { name: "Dashboard", href: "/dashboard", icon: House },
     { name: "Álbum", href: "/album", icon: Book },
     { name: "Matches", href: "/matches", icon: Heart },
-    { name: "Busca", href: "/busca", icon: MagnifyingGlass },
+    { name: "Em Breve", href: "/busca", icon: MagnifyingGlass },
     ...(isAdmin ? [{ name: "Admin", href: "/admin", icon: Shield }] : []),
   ];
 

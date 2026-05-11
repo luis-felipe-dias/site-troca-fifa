@@ -38,10 +38,10 @@ type Pagination = {
 };
 
 const LOCAIS_PRESET = [
-  { nome: "Praca Central", url: "https://maps.google.com/?q=Praca+Central" },
-  { nome: "Shopping Tropical", url: "https://maps.google.com/?q=Shopping+Tropical" },
-  { nome: "Parque Municipal", url: "https://maps.google.com/?q=Parque+Municipal" },
-  { nome: "Loja Yup", url: "https://maps.google.com/?q=Loja+Yup" },
+  { nome: "Papelaria Yup", url: "https://maps.app.goo.gl/NLcbiV6Bap54DQvt6" },
+  { nome: "Para incluir solicitar Luis", url: "" },
+  { nome: "Para incluir solicitar Luis", url: "" },
+  { nome: "Para incluir solicitar Luis", url: "" },
 ];
 
 export default function AdminClient() {

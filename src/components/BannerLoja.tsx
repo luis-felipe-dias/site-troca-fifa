@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { X, MapPin } from "@phosphor-icons/react";
 
-const LOJA_URL = "https://maps.app.goo.gl/MrQeLQpw2kTwuokk6";
+const LOJA_URL = "https://maps.app.goo.gl/NLcbiV6Bap54DQvt6";
 
 export default function BannerLoja() {
   const [imagemCarregou, setImagemCarregou] = useState(true);
@@ -97,7 +97,7 @@ function ModalLocalizacao({ onClose }: { onClose: () => void }) {
           <div className="flex items-center gap-2">
             <MapPin size={20} className="text-brincadeira-viva" />
             <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
-              Localização da Loja Yup
+              Localização da Papelaria Yup
             </h2>
           </div>
           <button
@@ -112,10 +112,11 @@ function ModalLocalizacao({ onClose }: { onClose: () => void }) {
           {/* Informações da loja */}
           <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 text-center">
             <p className="text-gray-600 dark:text-gray-300 font-medium mb-2">
-              📍 Av. Principal, 123 - Centro
+              📍 Av. Salime Nacif, 222 - Baixada, Manhuaçu - MG, 36902-051
+              | De frente para o ponto de taxi da rodoviaria
             </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              📅 Funcionamento: Seg-Sex 9h às 18h | Sáb 9h às 13h
+            <p className="text-sm text-gray-500 dark:text-gray-400"> 
+              📅Funcionamento: Seg-Sex 09:30h às 18:30h | Sáb 09:00h às 13:h
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               🎁 Traga suas figurinhas repetidas!

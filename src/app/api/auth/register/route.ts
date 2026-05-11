@@ -23,7 +23,9 @@ export async function POST(req: Request) {
 
     const dataNascimento = parseDateBR(data.dataNascimento);
     if (!dataNascimento) return jsonError("Data de nascimento inválida (use dd/mm/aaaa)", 400);
-    if (calcularIdade(dataNascimento) < 18) return jsonError("É necessário ser maior de 18 anos", 400);
+    
+    // ✅ ALTERAR ESTA LINHA: mudar de 18 para 14
+    if (calcularIdade(dataNascimento) < 14) return jsonError("É necessário ser maior de 14 anos", 400);
 
     await connectMongo();
 
@@ -53,4 +55,3 @@ export async function POST(req: Request) {
     return jsonError("Erro ao registrar", 500, process.env.NODE_ENV === "development" ? { message: msg } : undefined);
   }
 }
-
