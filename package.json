@@ -9,12 +9,14 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "node scripts/seed.mjs",
-    "admin:create": "node scripts/admin-create.mjs"
+    "admin:create": "node scripts/admin-create.mjs",
+    "migrate:figurinhas": "node scripts/migrate-usuario-figurinhas.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.7",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
+    "dotenv": "^17.4.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.1",
     "next": "^15.3.0",
