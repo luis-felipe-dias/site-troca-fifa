@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     // REALIZAR A TRANSFERÊNCIA DAS FIGURINHAS
     // ============================================
 
-    // 1. Diminuir quantidade de userA (figurinhaA)
+    // 1. ATUALIZAR figurinhaA do userA (perde uma unidade)
     const userAFigurinhaA = await UsuarioFigurinha.findOne({
       userId: troca.userA,
       codigo: troca.figurinhaA
@@ -62,11 +62,17 @@ export async function POST(req: Request) {
       throw new Error("UserA não possui a figurinha");
     }
 
+    // ✅ CORREÇÃO: Se quantidade é 1, não deleta, apenas atualiza
     if (userAFigurinhaA.quantidade <= 1) {
-      // Remove completamente se era 1
-      await UsuarioFigurinha.deleteOne({ _id: userAFigurinhaA._id }).session(session);
+      // A figurinha era repetida (quantidade=1 significa que ele tinha 1 repetida)
+      // Após a troca, ele perde essa unidade repetida, mas ainda tem a figurinha original
+      // Deixa de ser repetida, agora é apenas "tenho"
+      userAFigurinhaA.quantidade = 1;
+      userAFigurinhaA.repetida = false;
+      userAFigurinhaA.possui = true;
+      await userAFigurinhaA.save({ session });
     } else {
-      // Diminui quantidade
+      // Diminui quantidade (era 2 ou mais)
       userAFigurinhaA.quantidade -= 1;
       if (userAFigurinhaA.quantidade === 1) {
         userAFigurinhaA.repetida = false;
@@ -74,7 +80,7 @@ export async function POST(req: Request) {
       await userAFigurinhaA.save({ session });
     }
 
-    // 2. Diminuir quantidade de userB (figurinhaB)
+    // 2. ATUALIZAR figurinhaB do userB (perde uma unidade)
     const userBFigurinhaB = await UsuarioFigurinha.findOne({
       userId: troca.userB,
       codigo: troca.figurinhaB
@@ -84,8 +90,12 @@ export async function POST(req: Request) {
       throw new Error("UserB não possui a figurinha");
     }
 
+    // ✅ CORREÇÃO: Mesma lógica para o userB
     if (userBFigurinhaB.quantidade <= 1) {
-      await UsuarioFigurinha.deleteOne({ _id: userBFigurinhaB._id }).session(session);
+      userBFigurinhaB.quantidade = 1;
+      userBFigurinhaB.repetida = false;
+      userBFigurinhaB.possui = true;
+      await userBFigurinhaB.save({ session });
     } else {
       userBFigurinhaB.quantidade -= 1;
       if (userBFigurinhaB.quantidade === 1) {
@@ -94,7 +104,7 @@ export async function POST(req: Request) {
       await userBFigurinhaB.save({ session });
     }
 
-    // 3. Adicionar figurinhaB para userA (se não tiver)
+    // 3. ADICIONAR figurinhaB para userA (ganha uma unidade)
     const userATemFigurinhaB = await UsuarioFigurinha.findOne({
       userId: troca.userA,
       codigo: troca.figurinhaB
@@ -117,7 +127,7 @@ export async function POST(req: Request) {
       }], { session });
     }
 
-    // 4. Adicionar figurinhaA para userB (se não tiver)
+    // 4. ADICIONAR figurinhaA para userB (ganha uma unidade)
     const userBTemFigurinhaA = await UsuarioFigurinha.findOne({
       userId: troca.userB,
       codigo: troca.figurinhaA
