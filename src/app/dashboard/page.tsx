@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import BannerLoja from "@/components/BannerLoja";
-import { Bell, CheckCircle, Calendar, MapPin, Clock, Sparkle, CaretLeft, CaretRight, Funnel } from "@phosphor-icons/react";
+import { Bell, CheckCircle, Calendar, MapPin, Clock, Sparkle, CaretLeft, CaretRight, Funnel, ArrowsLeftRight } from "@phosphor-icons/react";
 
 type Stats = {
   totalFigurinhas: number;
@@ -13,6 +13,7 @@ type Stats = {
   faltantes: number;
   progresso: number;
   pendentes: number;
+  possiveisTrocas: number;
   user: { yupId: string; cidade: string };
 };
 
@@ -210,7 +211,7 @@ export default function DashboardPage() {
       month: "2-digit",
       year: "numeric"
     });
-  };
+  };  
 
   const formatarHorario = (data: string) => {
     return new Date(data).toLocaleTimeString("pt-BR", {
@@ -325,7 +326,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Progresso do Álbum (mesmo código, não precisa mudar) */}
+        {/* Progresso do Álbum com Possíveis Trocas */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -357,7 +358,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="flex-1 grid grid-cols-3 gap-3 text-center">
+              <div className="flex-1 grid grid-cols-4 gap-3 text-center">
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
                   <div className="text-2xl font-bold text-brincadeira-viva">{stats?.possui || 0}</div>
                   <div className="text-xs text-gray-500">Tenho</div>
@@ -375,12 +376,37 @@ export default function DashboardPage() {
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3">
                   <div className="text-2xl font-bold text-brincadeira-viva">{stats?.repetidas || 0}</div>
                   <div className="text-xs text-gray-500">Repetidas</div>
+                  <div className="w-full h-1 bg-gray-200 rounded-full mt-2">
+                    <div className="h-full bg-brincadeira-viva rounded-full" style={{ width: `${Math.min(100, (stats?.repetidas || 0) / (stats?.totalFigurinhas || 1) * 200)}%` }} />
+                  </div>
+                </div>
+                <div className="bg-gradient-to-br from-brincadeira-viva/20 to-abraco-doce/20 rounded-xl p-3 border border-brincadeira-viva/30">
+                  <div className="text-2xl font-bold text-brincadeira-viva">{stats?.possiveisTrocas || 0}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 flex items-center justify-center gap-1">
+                    <ArrowsLeftRight size={12} />
+                    Possíveis trocas
+                  </div>
+                  <div className="w-full h-1 bg-gray-200 rounded-full mt-2">
+                    <div className="h-full bg-brincadeira-viva rounded-full" style={{ width: `${Math.min(100, ((stats?.possiveisTrocas || 0) / (stats?.repetidas || 1)) * 100)}%` }} />
+                  </div>
                 </div>
               </div>
             </div>
             <div className="mt-4 text-center text-xs text-gray-500">
               Total: {stats?.totalFigurinhas || 0} figurinhas
             </div>
+            {stats?.possiveisTrocas > 0 && (
+              <div className="mt-3 text-center">
+                <a 
+                  href="/matches" 
+                  className="inline-flex items-center gap-2 text-sm text-brincadeira-viva hover:underline bg-brincadeira-viva/10 px-4 py-2 rounded-full transition-colors"
+                >
+                  <ArrowsLeftRight size={16} />
+                  Você tem {stats?.possiveisTrocas} oportunidade{stats?.possiveisTrocas !== 1 ? 's' : ''} de troca!
+                  Clique aqui para ver
+                </a>
+              </div>
+            )}
           </CardContent>
         </Card>
 
