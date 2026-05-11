@@ -29,9 +29,11 @@ export async function POST(req: Request) {
     const troca = await Troca.findById(data.id);
     if (!troca) return jsonError("Troca não encontrada", 404);
 
+    // Verificar permissão (apenas quem RECEBE a solicitação pode decidir)
     if (String(troca.userB) !== String(userId)) {
       return jsonError("Sem permissão", 403);
     }
+    
     if (troca.status !== "pendente") {
       return jsonError("Troca já foi decidida", 409);
     }
@@ -40,21 +42,45 @@ export async function POST(req: Request) {
     const userA = await Usuario.findById(troca.userA).select("yupId").lean();
 
     if (data.status === "aceito") {
+      // ============================================
+      // RESERVAR as figurinhas (impedir novas trocas)
+      // ============================================
+      
+      // Verificar se as figurinhas ainda estão disponíveis (não reservadas por outra troca)
+      const trocasConflitantesA = await Troca.findOne({
+        _id: { $ne: troca._id },
+        userA: troca.userA,
+        figurinhaA: troca.figurinhaA,
+        status: { $in: ["aceito", "pendente"] },
+        $or: [{ reservadaA: true }, { status: "aceito" }]
+      });
+      
+      const trocasConflitantesB = await Troca.findOne({
+        _id: { $ne: troca._id },
+        userB: troca.userB,
+        figurinhaB: troca.figurinhaB,
+        status: { $in: ["aceito", "pendente"] },
+        $or: [{ reservadaB: true }, { status: "aceito" }]
+      });
+
+      if (trocasConflitantesA || trocasConflitantesB) {
+        return jsonError("Uma das figurinhas já está reservada em outra troca", 409);
+      }
+
+      // Reservar as figurinhas
+      troca.reservadaA = true;
+      troca.reservadaB = true;
+      
       const agora = new Date();
       const proximoEvento = await EventoTroca.findOne({
         ativo: true,
         dataFim: { $gte: agora }
       }).sort({ dataInicio: 1 }).lean();
 
-      console.log("Próximo evento encontrado:", proximoEvento?._id, proximoEvento?.titulo);
-
       if (proximoEvento) {
         troca.eventoId = proximoEvento._id;
         troca.dataTroca = proximoEvento.dataInicio.toISOString();
         troca.localTroca = proximoEvento.localNome;
-        console.log("Evento vinculado à troca:", troca.eventoId);
-      } else {
-        console.log("NENHUM evento ativo encontrado.");
       }
       
       // Notificação para quem solicitou (userA)
@@ -62,7 +88,7 @@ export async function POST(req: Request) {
         userId: troca.userA,
         tipo: "troca_aceita",
         titulo: "Sua troca foi aceita! 🎉",
-        mensagem: `${usuario.yupId} aceitou trocar ${troca.figurinhaB} por ${troca.figurinhaA}`,
+        mensagem: `${usuario.yupId} aceitou trocar ${troca.figurinhaB} por ${troca.figurinhaA}. Clique em "Finalizar troca" após o encontro.`,
         dados: {
           trocaId: String(troca._id),
           usuarioYupId: usuario.yupId,
@@ -91,12 +117,6 @@ export async function POST(req: Request) {
     troca.status = data.status;
     await troca.save();
 
-    console.log("Troca salva:", { 
-      id: troca._id, 
-      status: troca.status, 
-      eventoId: troca.eventoId
-    });
-
     let eventoData = null;
     if (troca.eventoId) {
       const evento = await EventoTroca.findById(troca.eventoId).lean();
@@ -112,7 +132,7 @@ export async function POST(req: Request) {
     }
 
     return jsonOk({ 
-      message: data.status === "aceito" ? "Troca aceita! Evento vinculado." : "Troca recusada",
+      message: data.status === "aceito" ? "Troca aceita! Figurinhas reservadas." : "Troca recusada",
       eventoVinculado: !!troca.eventoId,
       evento: eventoData
     });

@@ -40,7 +40,7 @@ export async function GET() {
     });
 
     // ============================================
-    // NOVA LÓGICA: Buscar APENAS o que o usuário TEM
+    // Buscar APENAS o que o usuário TEM
     // Ausência de registro = NÃO possui
     // ============================================
     const minhasFigurinhas = await UsuarioFigurinha.find({ 
@@ -241,6 +241,34 @@ export async function POST(req: Request) {
 
     if (euPossuo) {
       return jsonError(`Você já possui ${data.figurinhaB}`, 400);
+    }
+
+    // ============================================
+    // NOVA VALIDAÇÃO: Verificar se as figurinhas não estão reservadas
+    // ============================================
+    
+    // Verificar se a figurinhaA do userA já está reservada em outra troca aceita
+    const reservaConflitanteA = await Troca.findOne({
+      userA: userId,
+      figurinhaA: data.figurinhaA,
+      status: { $in: ["aceito", "pendente"] },
+      reservadaA: true
+    });
+
+    if (reservaConflitanteA) {
+      return jsonError(`Sua figurinha ${data.figurinhaA} já está reservada em outra troca`, 409);
+    }
+
+    // Verificar se a figurinhaB do userB já está reservada em outra troca aceita
+    const reservaConflitanteB = await Troca.findOne({
+      userB: userBDestino._id,
+      figurinhaB: data.figurinhaB,
+      status: { $in: ["aceito", "pendente"] },
+      reservadaB: true
+    });
+
+    if (reservaConflitanteB) {
+      return jsonError(`A figurinha ${data.figurinhaB} de ${userBDestino.yupId} já está reservada em outra troca`, 409);
     }
 
     // Verificar se já existe troca pendente

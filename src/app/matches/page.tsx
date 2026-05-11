@@ -6,13 +6,13 @@ import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import MatchCard from "@/components/MatchCard";
-import { X, Calendar, MapPin, Clock, Link as LinkIcon } from "@phosphor-icons/react";
+import { X, Calendar, MapPin, Clock, Link as LinkIcon, CheckCircle } from "@phosphor-icons/react";
 
-type Suggestion = { 
-  userId: string; 
-  yupId: string; 
-  cidade: string; 
-  give: string; 
+type Suggestion = {
+  userId: string;
+  yupId: string;
+  cidade: string;
+  give: string;
   want: string;
   avatar: string;
 };
@@ -25,12 +25,12 @@ type TrocaEvento = {
   dataFim: string;
 };
 
-type Troca = { 
-  id: string; 
-  from: string; 
-  to: string; 
-  figurinhaA: string; 
-  figurinhaB: string; 
+type Troca = {
+  id: string;
+  from: string;
+  to: string;
+  figurinhaA: string;
+  figurinhaB: string;
   status: string;
   evento: TrocaEvento | null;
 };
@@ -41,6 +41,7 @@ export default function MatchesPage() {
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [aceitandoId, setAceitandoId] = useState<string | null>(null);
+  const [finalizandoId, setFinalizandoId] = useState<string | null>(null);
   const [eventoModal, setEventoModal] = useState<TrocaEvento | null>(null);
 
   async function load() {
@@ -73,7 +74,7 @@ export default function MatchesPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Erro");
       toast.success("Solicitação de troca enviada!");
-      
+
       setSuggestions(prev => prev.filter((_, i) => i !== currentIndex));
       setCurrentIndex(0);
       load();
@@ -97,13 +98,9 @@ export default function MatchesPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Erro");
-      
+
       if (status === "aceito") {
-        if (json.eventoVinculado) {
-          toast.success("Troca aceita! Evento de troca vinculado.");
-        } else {
-          toast.warning("Troca aceita, mas não há evento de troca ativo no momento.");
-        }
+        toast.success("Troca aceita! Figurinhas reservadas.");
       } else {
         toast.success("Troca recusada");
       }
@@ -112,6 +109,26 @@ export default function MatchesPage() {
       toast.error(e?.message || "Erro");
     } finally {
       setAceitandoId(null);
+    }
+  }
+
+  async function finalizarTroca(id: string) {
+    setFinalizandoId(id);
+    try {
+      const res = await fetch("/api/matches/finalizar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trocaId: id })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || "Erro");
+
+      toast.success("Troca finalizada! Figurinhas transferidas.");
+      load();
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao finalizar troca");
+    } finally {
+      setFinalizandoId(null);
     }
   }
 
@@ -213,13 +230,15 @@ export default function MatchesPage() {
             ) : (
               <div className="space-y-3">
                 {trocas.map((t) => (
-                  <div 
-                    key={t.id} 
+                  <div
+                    key={t.id}
                     className={`bg-white dark:bg-[#1a1a2e] rounded-xl p-4 border transition-all cursor-pointer ${
                       t.status === "aceito" ? "hover:shadow-lg hover:border-brincadeira-viva/50" : ""
                     } ${
                       t.status === "pendente" && t.to === "Você"
                         ? "border-yellow-300 dark:border-yellow-700 shadow-md"
+                        : t.status === "finalizado"
+                        ? "border-green-500 dark:border-green-700 bg-green-50 dark:bg-green-900/10"
                         : "border-gray-200 dark:border-gray-800"
                     }`}
                     onClick={() => {
@@ -240,14 +259,17 @@ export default function MatchesPage() {
                         </span>
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        t.status === "pendente" 
+                        t.status === "pendente"
                           ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                          : t.status === "aceito" 
+                          : t.status === "aceito"
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                            : t.status === "finalizado"
                             ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                             : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                       }`}>
                         {t.status === "pendente" && "⏳ Pendente"}
-                        {t.status === "aceito" && "✅ Aceito"}
+                        {t.status === "aceito" && "✅ Aceito (aguardando encontro)"}
+                        {t.status === "finalizado" && "🏁 Finalizado"}
                         {t.status === "recusado" && "❌ Recusado"}
                       </span>
                     </div>
@@ -255,7 +277,7 @@ export default function MatchesPage() {
                     {/* Figurinhas da troca */}
                     <div className="flex items-center justify-center gap-4 my-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
                       <div className="text-center">
-                        <div className="text-2xl mb-1">🎁</div>
+                        <div className="text-2xl mb-1">🎴</div>
                         <div className="font-bold text-brincadeira-viva">{t.figurinhaA}</div>
                         <div className="text-xs text-gray-500">{t.from === "Você" ? "Você dá" : "Você recebe"}</div>
                       </div>
@@ -267,7 +289,7 @@ export default function MatchesPage() {
                       </div>
                     </div>
 
-                    {/* Mini info do evento (se aceito) */}
+                    {/* Evento info (se aceito) */}
                     {t.status === "aceito" && t.evento && (
                       <div className="mt-2 text-center">
                         <span className="text-xs text-brincadeira-viva flex items-center justify-center gap-1">
@@ -281,31 +303,56 @@ export default function MatchesPage() {
                       </div>
                     )}
 
-                    {/* Botões de ação (apenas para trocas pendentes onde o usuário é o destinatário) */}
-                    {t.status === "pendente" && t.to === "Você" && (
-                      <div className="flex gap-3 mt-4">
+                    {/* Botões de ação */}
+                    <div className="flex gap-3 mt-4">
+                      {/* Pendente e usuário é destinatário */}
+                      {t.status === "pendente" && t.to === "Você" && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              decidir(t.id, "aceito");
+                            }}
+                            disabled={aceitandoId === t.id}
+                            className="flex-1 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors disabled:opacity-50"
+                          >
+                            {aceitandoId === t.id ? "Processando..." : "✅ Aceitar"}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              decidir(t.id, "recusado");
+                            }}
+                            disabled={aceitandoId === t.id}
+                            className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors disabled:opacity-50"
+                          >
+                            ❌ Recusar
+                          </button>
+                        </>
+                      )}
+
+                      {/* Aceito - mostrar botão Finalizar para ambos */}
+                      {t.status === "aceito" && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            decidir(t.id, "aceito");
+                            finalizarTroca(t.id);
                           }}
-                          disabled={aceitandoId === t.id}
-                          className="flex-1 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors disabled:opacity-50"
+                          disabled={finalizandoId === t.id}
+                          className="w-full py-2 rounded-lg bg-brincadeira-viva hover:bg-brincadeira-viva/80 text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                          {aceitandoId === t.id ? "Processando..." : "✅ Aceitar"}
+                          <CheckCircle size={18} />
+                          {finalizandoId === t.id ? "Finalizando..." : "🏁 Finalizar Troca"}
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            decidir(t.id, "recusado");
-                          }}
-                          disabled={aceitandoId === t.id}
-                          className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors disabled:opacity-50"
-                        >
-                          ❌ Recusar
-                        </button>
-                      </div>
-                    )}
+                      )}
+
+                      {/* Finalizado - mostrar mensagem */}
+                      {t.status === "finalizado" && (
+                        <div className="w-full text-center py-2 text-sm text-green-600 dark:text-green-400">
+                          ✓ Troca concluída com sucesso
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -316,15 +363,14 @@ export default function MatchesPage() {
 
       {/* Modal de Detalhes do Evento */}
       {eventoModal && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
           onClick={() => setEventoModal(null)}
         >
-          <div 
+          <div
             className="bg-white dark:bg-[#1a1a2e] rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="sticky top-0 bg-white dark:bg-[#1a1a2e] border-b border-gray-200 dark:border-gray-800 p-4 flex items-center justify-between rounded-t-2xl">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">🎪</span>
@@ -340,16 +386,13 @@ export default function MatchesPage() {
               </button>
             </div>
 
-            {/* Conteúdo */}
             <div className="p-5 space-y-5">
-              {/* Título */}
               <div className="text-center">
                 <h3 className="text-2xl font-bold text-brincadeira-viva">
                   {eventoModal.titulo}
                 </h3>
               </div>
 
-              {/* Data e Horário */}
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-3">
                 <div className="flex items-start gap-3">
                   <Calendar size={22} className="text-brincadeira-viva flex-shrink-0 mt-0.5" />
@@ -371,7 +414,6 @@ export default function MatchesPage() {
                 </div>
               </div>
 
-              {/* Localização */}
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
                 <div className="flex items-start gap-3">
                   <MapPin size={22} className="text-brincadeira-viva flex-shrink-0 mt-0.5" />
@@ -393,13 +435,11 @@ export default function MatchesPage() {
                 </div>
               </div>
 
-              {/* Informação adicional */}
               <div className="text-center text-xs text-gray-500 dark:text-gray-400 pt-2">
                 <p>📌 Apresente seu ID no local para realizar a troca</p>
-                <p className="mt-1">🎁 Não esqueça de levar suas figurinhas repetidas!</p>
+                <p className="mt-1">🎴 Não esqueça de levar suas figurinhas repetidas!</p>
               </div>
 
-              {/* Botão fechar */}
               <button
                 onClick={() => setEventoModal(null)}
                 className="w-full py-3 rounded-xl bg-brincadeira-viva text-white font-semibold hover:bg-brincadeira-viva/80 transition-colors"
