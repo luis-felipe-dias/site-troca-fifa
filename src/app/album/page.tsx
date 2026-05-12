@@ -75,7 +75,8 @@ const bandeiras: Record<string, string> = {
   "GHANA": "🇬🇭",
   "PANAMA": "🇵🇦",
   "FWC": "🏆",
-  "COCA-COLA": "🥤"
+  "COCA-COLA": "🥤",
+  "TUNISIA": "🇹🇳"
 };
 
 function groupByPagePair(stickers: Sticker[]) {
@@ -133,6 +134,18 @@ function groupByPagePair(stickers: Sticker[]) {
   }
   
   let resultado = Array.from(groups.values());
+  
+  // ORDENAR FIGURINHAS DENTRO DE CADA PÁGINA POR NÚMERO DO CÓDIGO
+  resultado.forEach(group => {
+    group.figurinhas.sort((a, b) => {
+      // Extrair número do código (ex: RSA1 -> 1, RSA10 -> 10, FWC1 -> 1)
+      const matchA = a.codigo.match(/\d+$/);
+      const matchB = b.codigo.match(/\d+$/);
+      const numA = matchA ? parseInt(matchA[0]) : 0;
+      const numB = matchB ? parseInt(matchB[0]) : 0;
+      return numA - numB;
+    });
+  });
   
   resultado.sort((a, b) => {
     if (a.id === 0) return -1;
