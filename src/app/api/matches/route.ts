@@ -131,8 +131,9 @@ export async function GET() {
       .lean();
 
     const ids = Array.from(new Set(trocas.flatMap((t) => [String(t.userA), String(t.userB)])));
-    const users = await Usuario.find({ _id: { $in: ids } }).select("yupId").lean();        
-    const uMap = new Map(users.map((u) => [String(u._id), u.yupId]));
+    // Buscar também o nome completo do usuário
+    const users = await Usuario.find({ _id: { $in: ids } }).select("yupId nomeCompleto").lean();        
+    const uMap = new Map(users.map((u) => [String(u._id), { yupId: u.yupId, nome: u.nomeCompleto }]));
 
     const eventoIds = trocas.filter(t => t.eventoId).map(t => t.eventoId);
     const eventos = await EventoTroca.find({ _id: { $in: eventoIds } }).lean();
@@ -143,11 +144,27 @@ export async function GET() {
       trocas: trocas.map((t) => {
         const isUserA = String(t.userA) === String(userId);
         const evento = t.eventoId ? eventoMap.get(String(t.eventoId)) : null;
+        
+        const userAInfo = uMap.get(String(t.userA));
+        const userBInfo = uMap.get(String(t.userB));
+
+        // Formatar nome do usuário para exibição
+        const formatarUsuario = (info: { yupId: string; nome: string } | undefined, isVoce: boolean) => {
+          if (isVoce) return "Você";
+          if (!info) return "—";
+          // Para status "aceito", exibir "yupId - Nome"
+          if (t.status === "aceito") {
+            // Pegar apenas o primeiro nome
+            const primeiroNome = info.nome.split(" ")[0];
+            return `${info.yupId} - ${primeiroNome}`;
+          }
+          return info.yupId;
+        };
 
         return {
           id: String(t._id),
-          from: isUserA ? "Você" : (uMap.get(String(t.userA)) || "—"),
-          to: isUserA ? (uMap.get(String(t.userB)) || "—") : "Você",
+          from: formatarUsuario(userAInfo, isUserA),
+          to: formatarUsuario(userBInfo, !isUserA),
           figurinhaA: t.figurinhaA,
           figurinhaB: t.figurinhaB,
           status: t.status,
@@ -200,10 +217,10 @@ export async function POST(req: Request) {
     // Buscar usuário destino
     let userBDestino = null;
     if (mongoose.Types.ObjectId.isValid(data.userB)) {
-      userBDestino = await Usuario.findById(data.userB).select("_id yupId").lean();        
+      userBDestino = await Usuario.findById(data.userB).select("_id yupId nomeCompleto").lean();        
     }
     if (!userBDestino) {
-      userBDestino = await Usuario.findOne({ yupId: data.userB }).select("_id yupId").lean();
+      userBDestino = await Usuario.findOne({ yupId: data.userB }).select("_id yupId nomeCompleto").lean();
     }
     if (!userBDestino) {
       return jsonError("Usuário destino não encontrado", 404);

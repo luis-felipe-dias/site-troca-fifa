@@ -1,173 +1,109 @@
 import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import { connectMongo } from "@/lib/db";
-import { requireAuth } from "@/lib/auth-request";
-import { Figurinha } from "@/models/Figurinha";
-import { UsuarioFigurinha } from "@/models/UsuarioFigurinha";
-import { Troca } from "@/models/Troca";
 import { Usuario } from "@/models/Usuario";
+import { z } from "zod";
 
-export async function GET() {
+// Schema de validação
+const RegisterSchema = z.object({
+  nomeCompleto: z.string().min(3, "Nome muito curto"),
+  cpf: z.string().min(11, "CPF inválido"),
+  email: z.string().email("E-mail inválido"),
+  dataNascimento: z.string().min(1, "Data de nascimento obrigatória"),
+  cidade: z.string().min(2, "Cidade obrigatória"),
+  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres")
+});
+
+// Gerar yupId único
+async function gerarYupId(): Promise<string> {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 6);
+  const yupId = `yup-${timestamp}${random}`;
+  
+  // Verificar se já existe
+  const existe = await Usuario.findOne({ yupId });
+  if (existe) {
+    return gerarYupId();
+  }
+  return yupId;
+}
+
+// Converter data DD/MM/YYYY para Date
+function parseDataNascimento(dataStr: string): Date {
+  const partes = dataStr.split("/");
+  if (partes.length === 3) {
+    const dia = parseInt(partes[0], 10);
+    const mes = parseInt(partes[1], 10) - 1;
+    const ano = parseInt(partes[2], 10);
+    return new Date(ano, mes, dia);
+  }
+  return new Date(dataStr);
+}
+
+export async function POST(request: Request) {
   try {
-    const payload = await requireAuth();
     await connectMongo();
-
-    const usuario = await Usuario.findOne({ yupId: payload.sub }).lean();
-    if (!usuario) {
-      return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
-    }
-    const userId = usuario._id;
-
-    const totalFigurinhas = await Figurinha.countDocuments();
-    const possui = await UsuarioFigurinha.countDocuments({ userId: userId, possui: true });
-    const repetidas = await UsuarioFigurinha.countDocuments({ userId: userId, repetida: true });
-    const faltantes = Math.max(0, totalFigurinhas - possui);
-    const progresso = totalFigurinhas ? Math.round((possui / totalFigurinhas) * 100) : 0;
-
-    const pendentes = await Troca.countDocuments({ userB: userId, status: "pendente" });
     
-    const user = await Usuario.findOne({ yupId: payload.sub }).select("yupId cidade").lean();
-
-    // ============================================
-    // CÁLCULO DE POSSÍVEIS TROCAS
-    // ============================================
+    const body = await request.json();
+    console.log("Body recebido:", body);
     
-    // 1. Buscar todas as figurinhas que o usuário TEM (possui = true)
-    const minhasFigurinhas = await UsuarioFigurinha.find({ 
-      userId: userId,
-      possui: true 
-    }).lean();
-
-    // 2. Identificar quais figurinhas eu tenho como REPETIDA (quantidade > 1)
-    const minhasRepetidas = minhasFigurinhas
-      .filter(f => f.repetida === true || f.quantidade > 1)
-      .map(f => f.codigo);
-
-    // 3. Identificar quais figurinhas me FALTAM (não possuo)
-    const todasFigurinhas = await Figurinha.find().select("codigo").lean();
-    const codigosQueTenho = new Set(minhasFigurinhas.map(f => f.codigo));
-    const faltantesLista = todasFigurinhas
-      .filter(f => !codigosQueTenho.has(f.codigo))
-      .map(f => f.codigo);
-
-    // Se não tenho repetidas ou não falta nada, possiveisTrocas = 0
-    if (minhasRepetidas.length === 0 || faltantesLista.length === 0) {
-      return NextResponse.json({ 
-        totalFigurinhas, 
-        possui, 
-        repetidas, 
-        faltantes, 
-        progresso, 
-        pendentes,
-        possiveisTrocas: 0,
-        user: {
-          yupId: user?.yupId || payload.sub,
-          cidade: user?.cidade || "Cidade não informada"
-        }
-      });
+    // Validar dados
+    const result = RegisterSchema.safeParse(body);
+    if (!result.success) {
+      const errors = result.error.issues.map(issue => issue.message);
+      console.log("Erro de validação:", errors);
+      return NextResponse.json({ error: errors[0] }, { status: 400 });
     }
-
-    // 4. Buscar outros usuários da MESMA CIDADE que têm as figurinhas que me faltam como repetidas
-    const outrosUsuarios = await Usuario.find({ 
-      _id: { $ne: userId },
-      cidade: usuario.cidade 
-    }).select("_id").lean();
-
-    if (outrosUsuarios.length === 0) {
-      return NextResponse.json({ 
-        totalFigurinhas, 
-        possui, 
-        repetidas, 
-        faltantes, 
-        progresso, 
-        pendentes,
-        possiveisTrocas: 0,
-        user: {
-          yupId: user?.yupId || payload.sub,
-          cidade: user?.cidade || "Cidade não informada"
-        }
-      });
+    
+    const { nomeCompleto, cpf, email, dataNascimento, cidade, senha } = result.data;
+    
+    // Verificar se e-mail já existe
+    const emailExiste = await Usuario.findOne({ email });
+    if (emailExiste) {
+      return NextResponse.json({ error: "E-mail já cadastrado" }, { status: 400 });
     }
-
-    const outrosIds = outrosUsuarios.map(u => u._id);
-
-    // 5. Buscar figurinhas que outros usuários têm como repetidas E que estão na minha lista de faltantes
-    const outrosPossuemRepetidas = await UsuarioFigurinha.find({
-      userId: { $in: outrosIds },
-      codigo: { $in: faltantesLista },
-      possui: true,
-      $or: [{ repetida: true }, { quantidade: { $gt: 1 } }]
-    }).lean();
-
-    // 6. Agrupar por código da figurinha que eles têm repetida
-    const codigosQueOutrosTemRepetidas = new Set(outrosPossuemRepetidas.map(f => f.codigo));
-
-    // 7. Para cada figurinha que me falta e que alguém tem repetida, verificar se EU tenho algo que ELES precisam
-    let possiveisTrocasCount = 0;
-    const combinacoesUsadas = new Set<string>();
-
-    // Buscar cache de necessidades dos outros usuários
-    const outrosIdsUnicos = [...new Set(outrosPossuemRepetidas.map(f => String(f.userId)))];
-    const cacheNecessidadesOutros = new Map<string, Set<string>>();
-
-    for (const outroId of outrosIdsUnicos) {
-      const outrasFigurinhas = await UsuarioFigurinha.find({ 
-        userId: outroId,
-        possui: true 
-      }).lean();
-      const outrasTenho = new Set(outrasFigurinhas.map(f => f.codigo));
-      const outrasFaltantes = todasFigurinhas
-        .filter(f => !outrasTenho.has(f.codigo))
-        .map(f => f.codigo);
-      cacheNecessidadesOutros.set(outroId, new Set(outrasFaltantes));
+    
+    // Verificar se CPF já existe
+    const cpfExiste = await Usuario.findOne({ cpf });
+    if (cpfExiste) {
+      return NextResponse.json({ error: "CPF já cadastrado" }, { status: 400 });
     }
-
-    // 8. Calcular matches possíveis
-    for (const outroItem of outrosPossuemRepetidas) {
-      const outroId = String(outroItem.userId);
-      const want = outroItem.codigo; // figurinha que EU quero (eles têm repetida)
-      
-      const necessidadesOutro = cacheNecessidadesOutros.get(outroId);
-      if (!necessidadesOutro) continue;
-
-      // Verificar se EU tenho alguma repetida que o OUTRO precisa
-      const possibleGive = minhasRepetidas.find(r => necessidadesOutro.has(r));
-      if (!possibleGive) continue;
-
-      const combinacao = `${outroId}|${possibleGive}|${want}`;
-      if (combinacoesUsadas.has(combinacao)) continue;
-
-      // Verificar se já existe troca pendente/aceita para esta combinação
-      const trocaExistente = await Troca.findOne({
-        $or: [
-          { userA: userId, userB: outroId, figurinhaA: possibleGive, figurinhaB: want, status: { $in: ["pendente", "aceito"] } },
-          { userA: outroId, userB: userId, figurinhaA: want, figurinhaB: possibleGive, status: { $in: ["pendente", "aceito"] } }
-        ]
-      }).lean();
-
-      if (!trocaExistente) {
-        combinacoesUsadas.add(combinacao);
-        possiveisTrocasCount++;
-      }
-
-      // Limitar a 99 para não sobrecarregar
-      if (possiveisTrocasCount >= 99) break;
-    }
-
-    return NextResponse.json({ 
-      totalFigurinhas, 
-      possui, 
-      repetidas, 
-      faltantes, 
-      progresso, 
-      pendentes,
-      possiveisTrocas: possiveisTrocasCount,
-      user: {
-        yupId: user?.yupId || payload.sub,
-        cidade: user?.cidade || "Cidade não informada"
-      }
+    
+    // Gerar yupId único
+    const yupId = await gerarYupId();
+    console.log("yupId gerado:", yupId);
+    
+    // Hash da senha
+    const senhaHash = await bcrypt.hash(senha, 10);
+    
+    // Criar usuário
+    const usuario = await Usuario.create({
+      yupId,
+      nomeCompleto,
+      cpf,
+      email,
+      dataNascimento: parseDataNascimento(dataNascimento),
+      cidade,
+      senhaHash,
+      senhaTemporaria: false,
+      role: "user"
     });
+    
+    console.log("Usuário criado com sucesso:", usuario.yupId);
+    
+    return NextResponse.json({
+      success: true,
+      message: "Usuário criado com sucesso!",
+      usuario: {
+        id: usuario._id,
+        yupId: usuario.yupId,
+        email: usuario.email,
+        nomeCompleto: usuario.nomeCompleto
+      }
+    }, { status: 201 });
+    
   } catch (error: any) {
-    console.error("Erro ao buscar stats:", error);
-    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+    console.error("Erro no registro:", error);
+    return NextResponse.json({ error: "Erro interno do servidor: " + error.message }, { status: 500 });
   }
 }

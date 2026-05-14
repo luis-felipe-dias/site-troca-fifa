@@ -159,6 +159,16 @@ export default function MatchesPage() {
     });
   };
 
+  // Função para formatar o nome do usuário baseado no status
+  const formatarUsuario = (nome: string, status: string) => {
+    if (status === "aceito" && nome !== "Você" && !nome.startsWith("Você")) {
+      // Se já estiver no formato "yupId - Nome", mantém
+      if (nome.includes(" - ")) return nome;
+      return nome;
+    }
+    return nome;
+  };
+
   return (
     <AppShell title="Matches">
       <div className="max-w-2xl mx-auto">
@@ -251,11 +261,11 @@ export default function MatchesPage() {
                     <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-gray-800 dark:text-white">
-                          {t.from}
+                          {formatarUsuario(t.from, t.status)}
                         </span>
                         <span className="text-gray-400">→</span>
                         <span className="font-semibold text-gray-800 dark:text-white">
-                          {t.to}
+                          {formatarUsuario(t.to, t.status)}
                         </span>
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
