@@ -14,17 +14,24 @@ const RegisterSchema = z.object({
   senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres")
 });
 
-// Gerar yupId único
+// Gerar yupId sequencial (yup-100001, yup-100002, ...)
 async function gerarYupId(): Promise<string> {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 6);
-  const yupId = `yup-${timestamp}${random}`;
+  // Buscar o último usuário criado
+  const ultimoUsuario = await Usuario.findOne()
+    .sort({ createdAt: -1 })
+    .select("yupId")
+    .lean();
   
-  // Verificar se já existe
-  const existe = await Usuario.findOne({ yupId });
-  if (existe) {
-    return gerarYupId();
+  let numero = 400001; // Número inicial
+  
+  if (ultimoUsuario && ultimoUsuario.yupId) {
+    const match = ultimoUsuario.yupId.match(/\d+/);
+    if (match) {
+      numero = parseInt(match[0], 10) + 1;
+    }
   }
+  
+  const yupId = `yup-${numero}`;
   return yupId;
 }
 
@@ -69,7 +76,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "CPF já cadastrado" }, { status: 400 });
     }
     
-    // Gerar yupId único
+    // Gerar yupId sequencial
     const yupId = await gerarYupId();
     console.log("yupId gerado:", yupId);
     
