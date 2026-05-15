@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import MatchCard from "@/components/MatchCard";
-import { X, Calendar, MapPin, Clock, Link as LinkIcon, CheckCircle } from "@phosphor-icons/react";
+import { X, Calendar, MapPin, Clock, Link as LinkIcon, CheckCircle, ArrowsClockwise } from "@phosphor-icons/react";
 
 type Suggestion = {
   userId: string;
@@ -39,25 +39,42 @@ export default function MatchesPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [trocas, setTrocas] = useState<Troca[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [aceitandoId, setAceitandoId] = useState<string | null>(null);
   const [finalizandoId, setFinalizandoId] = useState<string | null>(null);
   const [eventoModal, setEventoModal] = useState<TrocaEvento | null>(null);
 
-  async function load() {
+  async function load(showRefreshToast = false) {
     setLoading(true);
     try {
       const res = await fetch("/api/matches");
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Erro");
-      setSuggestions(json.suggestions || []);
-      setTrocas(json.trocas || []);
+      
+      const novasSugestoes = json.suggestions || [];
+      const novasTrocas = json.trocas || [];
+      
+      setSuggestions(novasSugestoes);
+      setTrocas(novasTrocas);
       setCurrentIndex(0);
+      
+      if (showRefreshToast && novasSugestoes.length > 0) {
+        toast.success(`${novasSugestoes.length} nova(s) sugestão(ões) disponível(eis)!`);
+      } else if (showRefreshToast) {
+        toast.info("Nenhuma nova sugestão no momento");
+      }
     } catch (e: any) {
       toast.error(e?.message || "Erro ao carregar matches");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  }
+
+  async function refresh() {
+    setRefreshing(true);
+    await load(true);
   }
 
   useEffect(() => {
@@ -77,7 +94,7 @@ export default function MatchesPage() {
 
       setSuggestions(prev => prev.filter((_, i) => i !== currentIndex));
       setCurrentIndex(0);
-      load();
+      setTimeout(() => load(), 500);
     } catch (e: any) {
       toast.error(e?.message || "Erro ao enviar troca");
     }
@@ -159,10 +176,8 @@ export default function MatchesPage() {
     });
   };
 
-  // Função para formatar o nome do usuário baseado no status
   const formatarUsuario = (nome: string, status: string) => {
     if (status === "aceito" && nome !== "Você" && !nome.startsWith("Você")) {
-      // Se já estiver no formato "yupId - Nome", mantém
       if (nome.includes(" - ")) return nome;
       return nome;
     }
@@ -172,12 +187,29 @@ export default function MatchesPage() {
   return (
     <AppShell title="Matches">
       <div className="max-w-2xl mx-auto">
+        {/* Botão de refresh */}
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={refresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            <ArrowsClockwise size={14} className={refreshing ? "animate-spin" : ""} />
+            {refreshing ? "Atualizando..." : "Atualizar"}
+          </button>
+        </div>
+
         {/* Seção de Sugestões */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <span className="text-2xl">💕</span>
               Sugestões para você
+              {suggestions.length > 0 && (
+                <span className="ml-2 text-xs bg-brincadeira-viva/20 text-brincadeira-viva px-2 py-0.5 rounded-full">
+                  {suggestions.length}
+                </span>
+              )}
             </CardTitle>
             <div className="text-sm text-gray-500 dark:text-gray-400">
               Pessoas que têm o que você precisa e precisam do que você tem repetido
@@ -219,6 +251,11 @@ export default function MatchesPage() {
             <CardTitle className="flex items-center gap-2">
               <span className="text-2xl">📋</span>
               Minhas Trocas
+              {trocas.length > 0 && (
+                <span className="ml-2 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                  {trocas.length}
+                </span>
+              )}
             </CardTitle>
             <div className="text-sm text-gray-500 dark:text-gray-400">
               Solicitações enviadas e recebidas
@@ -315,7 +352,6 @@ export default function MatchesPage() {
 
                     {/* Botões de ação */}
                     <div className="flex gap-3 mt-4">
-                      {/* Pendente e usuário é destinatário */}
                       {t.status === "pendente" && t.to === "Você" && (
                         <>
                           <button
@@ -341,7 +377,6 @@ export default function MatchesPage() {
                         </>
                       )}
 
-                      {/* Aceito - mostrar botão Finalizar para ambos */}
                       {t.status === "aceito" && (
                         <button
                           onClick={(e) => {
@@ -356,7 +391,6 @@ export default function MatchesPage() {
                         </button>
                       )}
 
-                      {/* Finalizado - mostrar mensagem */}
                       {t.status === "finalizado" && (
                         <div className="w-full text-center py-2 text-sm text-green-600 dark:text-green-400">
                           ✓ Troca concluída com sucesso

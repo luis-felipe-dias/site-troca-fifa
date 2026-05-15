@@ -10,44 +10,72 @@ export async function GET() {
     const payload = await requireAuth();
     await connectMongo();
 
-    // Buscar o _id do usuário
     const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id").lean();
     if (!usuario) {
       return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
     }
     const userId = usuario._id;
 
-    // Buscar todas as figurinhas
-    const todasFigurinhas = await Figurinha.find({}).sort({ pagina: 1, codigo: 1 }).lean();
-
+    // Buscar todas as figurinhas do sistema
+    const todasFigurinhas = await Figurinha.find().sort({ pagina: 1, codigo: 1 }).lean();
+    
     // Buscar as figurinhas do usuário
-    const userFigurinhas = await UsuarioFigurinha.find({ userId: userId }).lean();
-
-    // Criar mapa de figurinhas do usuário
-    const userMap = new Map();
-    userFigurinhas.forEach((uf) => {
-      userMap.set(uf.codigo, uf);
+    const minhasFigurinhas = await UsuarioFigurinha.find({ userId }).lean();
+    
+    // Criar mapa para acesso rápido
+    const minhasFigurinhasMap = new Map();
+    minhasFigurinhas.forEach(f => {
+      minhasFigurinhasMap.set(f.codigo, {
+        possui: f.possui,
+        repetida: f.repetida,
+        quantidade: f.quantidade || 1
+      });
     });
 
-    // Combinar dados
-    const stickers = todasFigurinhas.map((fig) => {
-      const userFig = userMap.get(fig.codigo);
+    // Estatísticas
+    let tenho = 0;
+    let repetidas = 0;
+    let totalFigurinhasPossuoQuantidade = 0;
+
+    // Montar array de figurinhas com status
+    const stickers = todasFigurinhas.map(f => {
+      const minhaFig = minhasFigurinhasMap.get(f.codigo);
+      const possui = minhaFig?.possui || false;
+      const repetida = minhaFig?.repetida || false;
+      const quantidade = minhaFig?.quantidade || (possui ? 1 : 0);
+      
+      if (possui) {
+        tenho++;
+        totalFigurinhasPossuoQuantidade += quantidade;
+        if (repetida) {
+          repetidas++;
+        }
+      }
+      
       return {
-        codigo: fig.codigo,
-        pagina: fig.pagina,
-        nomeSelecao: fig.nomeSelecao,
-        possui: userFig?.possui || false,
-        repetida: userFig?.repetida || false,
-        quantidadeRepetida: userFig?.quantidadeRepetida || 0
+        codigo: f.codigo,
+        pagina: f.pagina,
+        nomeSelecao: f.nomeSelecao,
+        possui: possui,
+        repetida: repetida,
+        quantidadeRepetida: quantidade > 1 ? quantidade : 0
       };
     });
 
-    return NextResponse.json({ stickers });
+    const totalFigurinhas = todasFigurinhas.length;
+    const faltam = totalFigurinhas - tenho;
+
+    return NextResponse.json({
+      stickers,
+      total: totalFigurinhas,
+      tenho,
+      faltam,
+      repetidas,
+      totalFigurinhasPossuoQuantidade
+    });
+    
   } catch (error: any) {
     console.error("Erro ao carregar álbum:", error);
-    return NextResponse.json(
-      { error: error.message || "Erro ao carregar álbum" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }

@@ -1,145 +1,182 @@
-import { z } from "zod";
+import { NextRequest, NextResponse } from "next/server";
 import { connectMongo } from "@/lib/db";
 import { requireAuth } from "@/lib/auth-request";
 import { Troca } from "@/models/Troca";
+import { UsuarioFigurinha } from "@/models/UsuarioFigurinha";
 import { EventoTroca } from "@/models/EventoTroca";
-import { Usuario } from "@/models/Usuario";
 import { Notificacao } from "@/models/Notificacao";
-import { jsonError, jsonOk } from "@/lib/http";
+import { Usuario } from "@/models/Usuario";
 
-const Schema = z.object({
-  id: z.string().min(10),
-  status: z.enum(["aceito", "recusado"])
-});
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const payload = await requireAuth();
-    const body = await req.json();
-    const data = Schema.parse(body);
-
     await connectMongo();
 
-    const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id yupId").lean();
-    if (!usuario) {
-      return jsonError("Usuário não encontrado", 404);
-    }
-    const userId = usuario._id;
+    const body = await req.json();
+    const { id, status } = body;
 
-    const troca = await Troca.findById(data.id);
-    if (!troca) return jsonError("Troca não encontrada", 404);
-
-    // Verificar permissão (apenas quem RECEBE a solicitação pode decidir)
-    if (String(troca.userB) !== String(userId)) {
-      return jsonError("Sem permissão", 403);
+    if (!id || !["aceito", "recusado"].includes(status)) {
+      return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
     }
-    
+
+    // Buscar a troca
+    const troca = await Troca.findById(id).lean();
+    if (!troca) {
+      return NextResponse.json({ error: "Troca não encontrada" }, { status: 404 });
+    }
+
+    // Verificar se o usuário é o destinatário (userB) ou o remetente (userA) pode aceitar?
+    // Por segurança, apenas o destinatário pode aceitar/recusar
+    const usuario = await Usuario.findOne({ yupId: payload.sub }).select("_id").lean();
+    if (!usuario || String(troca.userB) !== String(usuario._id)) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    // Verificar se já foi respondida
     if (troca.status !== "pendente") {
-      return jsonError("Troca já foi decidida", 409);
+      return NextResponse.json({ error: "Esta troca já foi respondida" }, { status: 400 });
     }
 
-    // Buscar o usuário A para notificação
-    const userA = await Usuario.findById(troca.userA).select("yupId").lean();
+    // Buscar evento ativo
+    const eventoAtivo = await EventoTroca.findOne({
+      ativo: true,
+      dataInicio: { $lte: new Date() },
+      dataFim: { $gte: new Date() }
+    }).lean();
 
-    if (data.status === "aceito") {
+    if (status === "aceito") {
       // ============================================
-      // RESERVAR as figurinhas (impedir novas trocas)
+      // VALIDAÇÕES DE RESERVA ANTES DE ACEITAR
       // ============================================
       
-      // Verificar se as figurinhas ainda estão disponíveis (não reservadas por outra troca)
-      const trocasConflitantesA = await Troca.findOne({
-        _id: { $ne: troca._id },
+      // 1. Verificar se a figurinhaA do userA ainda está disponível
+      const reservaConflitanteA = await Troca.findOne({
+        _id: { $ne: id },
         userA: troca.userA,
         figurinhaA: troca.figurinhaA,
-        status: { $in: ["aceito", "pendente"] },
-        $or: [{ reservadaA: true }, { status: "aceito" }]
+        status: "aceito",
+        reservadaA: true
       });
-      
-      const trocasConflitantesB = await Troca.findOne({
-        _id: { $ne: troca._id },
+
+      if (reservaConflitanteA) {
+        return NextResponse.json({ 
+          error: `A figurinha ${troca.figurinhaA} já foi reservada em outra troca` 
+        }, { status: 409 });
+      }
+
+      // 2. Verificar se a figurinhaB do userB ainda está disponível
+      const reservaConflitanteB = await Troca.findOne({
+        _id: { $ne: id },
         userB: troca.userB,
         figurinhaB: troca.figurinhaB,
-        status: { $in: ["aceito", "pendente"] },
-        $or: [{ reservadaB: true }, { status: "aceito" }]
+        status: "aceito",
+        reservadaB: true
       });
 
-      if (trocasConflitantesA || trocasConflitantesB) {
-        return jsonError("Uma das figurinhas já está reservada em outra troca", 409);
+      if (reservaConflitanteB) {
+        return NextResponse.json({ 
+          error: `A figurinha ${troca.figurinhaB} já foi reservada em outra troca` 
+        }, { status: 409 });
       }
 
-      // Reservar as figurinhas
-      troca.reservadaA = true;
-      troca.reservadaB = true;
-      
-      const agora = new Date();
-      const proximoEvento = await EventoTroca.findOne({
-        ativo: true,
-        dataFim: { $gte: agora }
-      }).sort({ dataInicio: 1 }).lean();
+      // 3. Verificar se o userA ainda possui a figurinha como repetida
+      const userAFaltante = await UsuarioFigurinha.findOne({
+        userId: troca.userA,
+        codigo: troca.figurinhaA,
+        possui: true,
+        repetida: true
+      }).lean();
 
-      if (proximoEvento) {
-        troca.eventoId = proximoEvento._id;
-        troca.dataTroca = proximoEvento.dataInicio.toISOString();
-        troca.localTroca = proximoEvento.localNome;
+      if (!userAFaltante) {
+        return NextResponse.json({ 
+          error: `${troca.figurinhaA} não está mais disponível para troca` 
+        }, { status: 409 });
       }
+
+      // 4. Verificar se o userB ainda possui a figurinha como repetida
+      const userBFaltante = await UsuarioFigurinha.findOne({
+        userId: troca.userB,
+        codigo: troca.figurinhaB,
+        possui: true,
+        repetida: true
+      }).lean();
+
+      if (!userBFaltante) {
+        return NextResponse.json({ 
+          error: `${troca.figurinhaB} não está mais disponível para troca` 
+        }, { status: 409 });
+      }
+
+      // ============================================
+      // RESERVAR AS FIGURINHAS
+      // ============================================
       
-      // Notificação para quem solicitou (userA)
+      // Atualizar a troca com status aceito e marcar reservas
+      await Troca.updateOne(
+        { _id: id },
+        { 
+          $set: { 
+            status: "aceito",
+            reservadaA: true,
+            reservadaB: true,
+            eventoId: eventoAtivo?._id || null
+          }
+        }
+      );
+
+      // Criar notificação para o userA
+      const userADados = await Usuario.findById(troca.userA).select("yupId").lean();
+      const userBDados = await Usuario.findById(troca.userB).select("yupId").lean();
+
       await Notificacao.create({
         userId: troca.userA,
         tipo: "troca_aceita",
-        titulo: "Sua troca foi aceita! 🎉",
-        mensagem: `${usuario.yupId} aceitou trocar ${troca.figurinhaB} por ${troca.figurinhaA}. Clique em "Finalizar troca" após o encontro.`,
+        titulo: "Troca aceita! 🎉",
+        mensagem: `${userBDados?.yupId} aceitou a troca! Figurinhas reservadas.`,
         dados: {
           trocaId: String(troca._id),
-          usuarioYupId: usuario.yupId,
+          usuarioYupId: userBDados?.yupId,
           figurinhaA: troca.figurinhaA,
           figurinhaB: troca.figurinhaB
         },
         lida: false
       });
+
+      return NextResponse.json({ 
+        success: true, 
+        message: "Troca aceita! Figurinhas reservadas." 
+      });
+
     } else {
-      // Notificação para quem solicitou (userA) - troca recusada
+      // RECUSADO - apenas atualiza o status
+      await Troca.updateOne(
+        { _id: id },
+        { $set: { status: "recusado" } }
+      );
+
+      // Notificar o userA
+      const userADados = await Usuario.findById(troca.userA).select("yupId").lean();
+      const userBDados = await Usuario.findById(troca.userB).select("yupId").lean();
+
       await Notificacao.create({
         userId: troca.userA,
         tipo: "troca_recusada",
         titulo: "Troca recusada",
-        mensagem: `${usuario.yupId} recusou trocar ${troca.figurinhaB} por ${troca.figurinhaA}`,
+        mensagem: `${userBDados?.yupId} recusou a troca de ${troca.figurinhaA} por ${troca.figurinhaB}`,
         dados: {
           trocaId: String(troca._id),
-          usuarioYupId: usuario.yupId,
+          usuarioYupId: userBDados?.yupId,
           figurinhaA: troca.figurinhaA,
           figurinhaB: troca.figurinhaB
         },
         lida: false
       });
+
+      return NextResponse.json({ success: true, message: "Troca recusada" });
     }
 
-    troca.status = data.status;
-    await troca.save();
-
-    let eventoData = null;
-    if (troca.eventoId) {
-      const evento = await EventoTroca.findById(troca.eventoId).lean();
-      if (evento) {
-        eventoData = {
-          titulo: evento.titulo,
-          localNome: evento.localNome,
-          localUrl: evento.localUrl,
-          dataInicio: evento.dataInicio,
-          dataFim: evento.dataFim
-        };
-      }
-    }
-
-    return jsonOk({ 
-      message: data.status === "aceito" ? "Troca aceita! Figurinhas reservadas." : "Troca recusada",
-      eventoVinculado: !!troca.eventoId,
-      evento: eventoData
-    });
-  } catch (err: any) {
-    if (err?.name === "ZodError") return jsonError("Dados inválidos", 400, err.issues);
-    if (String(err?.message || "") === "UNAUTHORIZED") return jsonError("Não autenticado", 401);
-    console.error("Erro no decidir:", err);
-    return jsonError("Erro interno", 500);
+  } catch (error: any) {
+    console.error("Erro ao decidir troca:", error);
+    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
   }
 }

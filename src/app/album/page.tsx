@@ -138,7 +138,6 @@ function groupByPagePair(stickers: Sticker[]) {
   // ORDENAR FIGURINHAS DENTRO DE CADA PÁGINA POR NÚMERO DO CÓDIGO
   resultado.forEach(group => {
     group.figurinhas.sort((a, b) => {
-      // Extrair número do código (ex: RSA1 -> 1, RSA10 -> 10, FWC1 -> 1)
       const matchA = a.codigo.match(/\d+$/);
       const matchB = b.codigo.match(/\d+$/);
       const numA = matchA ? parseInt(matchA[0]) : 0;
@@ -230,19 +229,36 @@ export default function AlbumPage() {
 
   async function mark(codigo: string, possui: boolean, repetida: boolean, quantidadeRepetida?: number) {
     try {
+      // CORREÇÃO: Garantir que quantidadeRepetida seja enviada corretamente
+      const payload: any = { codigo, possui, repetida };
+      
+      if (repetida && quantidadeRepetida && quantidadeRepetida > 0) {
+        payload.quantidadeRepetida = quantidadeRepetida;
+      } else if (repetida) {
+        payload.quantidadeRepetida = 1;
+      }
+      
+      console.log("Enviando para API:", payload);
+      
       const res = await fetch("/api/album/mark", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codigo, possui, repetida, quantidadeRepetida })
+        body: JSON.stringify(payload)
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Erro");
+      
       setStickers((prev) =>
         prev.map((s) =>
-          s.codigo === codigo ? { ...s, possui, repetida, quantidadeRepetida: repetida ? Math.max(1, quantidadeRepetida || 1) : 0 } : s
+          s.codigo === codigo ? { 
+            ...s, 
+            possui, 
+            repetida, 
+            quantidadeRepetida: repetida ? Math.max(1, quantidadeRepetida || 1) : 0 
+          } : s
         )
       );
-      toast.success("Salvo");
+      toast.success(repetida ? `Salvo ${quantidadeRepetida || 1}x repetidas` : "Salvo");
     } catch (e: any) {
       toast.error(e?.message || "Erro ao salvar");
     }
@@ -621,7 +637,7 @@ export default function AlbumPage() {
                     const q = Math.max(1, qty || 1);
                     mark(selected.codigo, true, true, q);
                     setSelected((s) => (s ? { ...s, quantidadeRepetida: q } : s));
-                    toast.success("Quantidade salva");
+                    toast.success(`Quantidade ${q} salva`);
                   }}
                 >
                   Salvar

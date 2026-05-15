@@ -1,6 +1,6 @@
 import mongoose, { Schema, type Model, type Types } from "mongoose";
 
-export type NotificacaoTipo = "solicitacao_troca" | "troca_aceita" | "troca_recusada";
+export type NotificacaoTipo = "solicitacao_troca" | "troca_aceita" | "troca_recusada" | "troca_finalizada";
 
 export type NotificacaoDoc = {
   userId: Types.ObjectId;
@@ -21,7 +21,11 @@ export type NotificacaoDoc = {
 const NotificacaoSchema = new Schema<NotificacaoDoc>(
   {
     userId: { type: Schema.Types.ObjectId, required: true, index: true, ref: "Usuario" },
-    tipo: { type: String, required: true, enum: ["solicitacao_troca", "troca_aceita", "troca_recusada"] },
+    tipo: { 
+      type: String, 
+      required: true, 
+      enum: ["solicitacao_troca", "troca_aceita", "troca_recusada", "troca_finalizada"] 
+    },
     titulo: { type: String, required: true },
     mensagem: { type: String, required: true },
     dados: {
